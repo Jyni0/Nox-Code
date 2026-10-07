@@ -1,0 +1,447 @@
+/**
+ * Built-in extensions. Each one can be switched off and most have settings
+ * (Settings → Extensions, or the Extensions view in the sidebar).
+ */
+import { Prec, EditorState, type Extension } from "@codemirror/state";
+import { EditorView, highlightTrailingWhitespace, keymap } from "@codemirror/view";
+import { autocompletion, closeBrackets, closeBracketsKeymap, completeAnyWord, completionKeymap } from "@codemirror/autocomplete";
+import { codeFolding, foldGutter, foldKeymap } from "@codemirror/language";
+import { highlightSelectionMatches } from "@codemirror/search";
+import { lintGutter, linter } from "@codemirror/lint";
+import { vim } from "@replit/codemirror-vim";
+import { showMinimap } from "@replit/codemirror-minimap";
+import { indentationMarkers } from "@replit/codemirror-indentation-markers";
+import { LANGUAGES } from "@/editor/languages";
+import { useSettings, type SettingsState } from "@/stores/settings";
+import { RAINBOW_PALETTES, colorPreview, gitGutter, rainbowBrackets, todoHighlighter } from "./editorFeatures";
+
+export type ExtCategory = "Editing" | "Visual" | "Formatting" | "Git" | "Productivity" | "Keymaps" | "Previews" | "Languages";
+
+export interface ExtSetting {
+  key: string;
+  label: string;
+  description?: string;
+  type: "boolean" | "number" | "select" | "text";
+  default: unknown;
+  options?: Array<{ value: string; label: string }>;
+  min?: number;
+  max?: number;
+  step?: number;
+}
+
+export interface ExtContext {
+  bufferId: string;
+  langId: string;
+  path: string | null;
+  settings: Record<string, unknown>;
+}
+
+export interface NoxExtension {
+  id: string;
+  name: string;
+  description: string;
+  details?: string[];
+  category: ExtCategory;
+  /** ICON_LIBRARY name + tile color. */
+  icon: string;
+  color: string;
+  version: string;
+  defaultEnabled: boolean;
+  settings?: ExtSetting[];
+  /** Commands this extension adds (shown on its card). */
+  commands?: string[];
+  editor?: (ctx: ExtContext) => Extension;
+}
+
+const minimapDom = () => ({ dom: document.createElement("div") });
+
+const CORE: NoxExtension[] = [
+  {
+    id: "vim",
+    name: "Vim Mode",
+    description: "Modal editing with Vim keybindings, : commands, registers and macros.",
+    details: ["Normal, insert, visual and visual-block modes", "Ex commands like :w, :s/foo/bar/g", "Mode shown in the status bar"],
+    category: "Keymaps",
+    icon: "Terminal",
+    color: "#019833",
+    version: "6.4.0",
+    defaultEnabled: false,
+    editor: () => Prec.highest(vim({ status: true })),
+  },
+  {
+    id: "minimap",
+    name: "Minimap",
+    description: "A zoomed-out overview of the file next to the scrollbar.",
+    category: "Visual",
+    icon: "Map",
+    color: "#5b8cff",
+    version: "0.5.2",
+    defaultEnabled: true,
+    settings: [
+      {
+        key: "displayText",
+        label: "Render as",
+        type: "select",
+        default: "blocks",
+        options: [
+          { value: "blocks", label: "Blocks" },
+          { value: "characters", label: "Characters" },
+        ],
+      },
+      {
+        key: "showOverlay",
+        label: "Viewport overlay",
+        type: "select",
+        default: "mouse-over",
+        options: [
+          { value: "always", label: "Always" },
+          { value: "mouse-over", label: "On hover" },
+        ],
+      },
+    ],
+    editor: ({ settings }) =>
+      showMinimap.compute(["doc"], () => ({
+        create: minimapDom,
+        displayText: settings.displayText as "blocks" | "characters",
+        showOverlay: settings.showOverlay as "always" | "mouse-over",
+      })),
+  },
+  {
+    id: "indent-guides",
+    name: "Indent Guides",
+    description: "Vertical guides for every indentation level; the active block is highlighted.",
+    category: "Visual",
+    icon: "ListTree",
+    color: "#26a69a",
+    version: "6.5.3",
+    defaultEnabled: true,
+    settings: [
+      { key: "highlightActive", label: "Highlight active block", type: "boolean", default: true },
+      {
+        key: "markerType",
+        label: "Guides span",
+        type: "select",
+        default: "fullScope",
+        options: [
+          { value: "fullScope", label: "Whole scope" },
+          { value: "codeOnly", label: "Code only" },
+        ],
+      },
+      { key: "thickness", label: "Thickness", type: "number", default: 1, min: 1, max: 3 },
+    ],
+    editor: ({ settings }) =>
+      indentationMarkers({
+        highlightActiveBlock: settings.highlightActive as boolean,
+        markerType: settings.markerType as "fullScope" | "codeOnly",
+        thickness: settings.thickness as number,
+        activeThickness: (settings.thickness as number) + 0.5,
+        colors: {
+          light: "var(--ed-indent, color-mix(in srgb, var(--text-main) 10%, transparent))",
+          dark: "var(--ed-indent, color-mix(in srgb, var(--text-main) 9%, transparent))",
+          activeLight: "var(--ed-indent-active, color-mix(in srgb, var(--text-main) 28%, transparent))",
+          activeDark: "var(--ed-indent-active, color-mix(in srgb, var(--text-main) 24%, transparent))",
+        },
+      }),
+  },
+  {
+    id: "rainbow-brackets",
+    name: "Rainbow Brackets",
+    description: "Colors matching bracket pairs by nesting depth.",
+    category: "Visual",
+    icon: "Brackets",
+    color: "#da70d6",
+    version: "1.0.0",
+    defaultEnabled: true,
+    settings: [
+      {
+        key: "palette",
+        label: "Palette",
+        type: "select",
+        default: "classic",
+        options: Object.keys(RAINBOW_PALETTES).map((k) => ({ value: k, label: k[0].toUpperCase() + k.slice(1) })),
+      },
+    ],
+    editor: ({ settings }) => rainbowBrackets(RAINBOW_PALETTES[settings.palette as string] ?? RAINBOW_PALETTES.classic),
+  },
+  {
+    id: "color-preview",
+    name: "Color Highlighter",
+    description: "Shows a swatch next to #hex, rgb() and hsl() colors — click it to pick a new one.",
+    category: "Visual",
+    icon: "Palette",
+    color: "#ff9e64",
+    version: "1.0.0",
+    defaultEnabled: true,
+    editor: () => colorPreview(),
+  },
+  {
+    id: "todo-highlight",
+    name: "TODO Highlight",
+    description: "Makes TODO, FIXME, HACK and NOTE comments impossible to miss.",
+    category: "Productivity",
+    icon: "ListChecks",
+    color: "#ffd866",
+    version: "1.0.0",
+    defaultEnabled: true,
+    settings: [{ key: "keywords", label: "Keywords", description: "Comma separated", type: "text", default: "TODO, FIXME, HACK, NOTE, BUG, XXX" }],
+    editor: ({ settings }) => todoHighlighter(String(settings.keywords).split(",")),
+  },
+  {
+    id: "git-gutter",
+    name: "Git Gutter",
+    description: "Added, modified and deleted lines marked in the gutter against HEAD.",
+    category: "Git",
+    icon: "GitBranch",
+    color: "#f14e32",
+    version: "1.0.0",
+    defaultEnabled: true,
+    editor: ({ bufferId }) => gitGutter(bufferId),
+  },
+  {
+    id: "auto-close",
+    name: "Auto Close Brackets",
+    description: "Types the closing bracket or quote for you and steps over it.",
+    category: "Editing",
+    icon: "Braces",
+    color: "#82aaff",
+    version: "6.20.0",
+    defaultEnabled: true,
+    editor: () => [closeBrackets(), keymap.of(closeBracketsKeymap)],
+  },
+  {
+    id: "autocomplete",
+    name: "IntelliSense Lite",
+    description: "Completions from the language and from words already in the file.",
+    category: "Editing",
+    icon: "Sparkles",
+    color: "#c792ea",
+    version: "6.20.0",
+    defaultEnabled: true,
+    settings: [
+      { key: "onTyping", label: "Suggest while typing", type: "boolean", default: true },
+      { key: "anyWord", label: "Include words from the file", type: "boolean", default: true },
+    ],
+    editor: ({ settings }) => [
+      autocompletion({ activateOnTyping: settings.onTyping as boolean, icons: true }),
+      keymap.of(completionKeymap),
+      settings.anyWord ? EditorState.languageData.of(() => [{ autocomplete: completeAnyWord }]) : [],
+    ],
+  },
+  {
+    id: "selection-highlight",
+    name: "Selection Highlight",
+    description: "Highlights other occurrences of the selected word.",
+    category: "Visual",
+    icon: "Target",
+    color: "#7fdbca",
+    version: "6.7.0",
+    defaultEnabled: true,
+    editor: () => highlightSelectionMatches({ minSelectionLength: 2 }),
+  },
+  {
+    id: "folding",
+    name: "Code Folding",
+    description: "Fold arrows in the gutter; Ctrl+Shift+[ and ] fold and unfold.",
+    category: "Editing",
+    icon: "Layers",
+    color: "#9ccfd8",
+    version: "6.13.0",
+    defaultEnabled: true,
+    editor: () => [
+      codeFolding(),
+      foldGutter({
+        markerDOM: (open) => {
+          const s = document.createElement("span");
+          s.textContent = open ? "⌄" : "›";
+          s.style.cssText = "display:inline-block;width:12px;text-align:center;";
+          return s;
+        },
+      }),
+      keymap.of(foldKeymap),
+    ],
+  },
+  {
+    id: "trailing-whitespace",
+    name: "Trailing Whitespace",
+    description: "Marks spaces and tabs at the end of lines.",
+    category: "Visual",
+    icon: "Pilcrow",
+    color: "#f85149",
+    version: "1.0.0",
+    defaultEnabled: false,
+    editor: () => highlightTrailingWhitespace(),
+  },
+  {
+    id: "smooth-caret",
+    name: "Smooth Caret",
+    description: "The cursor glides between positions instead of jumping.",
+    category: "Visual",
+    icon: "WandSparkles",
+    color: "#36f9f6",
+    version: "1.0.0",
+    defaultEnabled: true,
+    editor: () => EditorView.editorAttributes.of({ class: "nox-smooth-caret" }),
+  },
+  {
+    id: "json-lint",
+    name: "JSON Validator",
+    description: "Underlines JSON syntax errors as you type.",
+    category: "Editing",
+    icon: "ShieldCheck",
+    color: "#cbcb41",
+    version: "1.0.0",
+    defaultEnabled: true,
+    editor: ({ langId }) => {
+      if (langId !== "json") return [];
+      return [
+        lintGutter(),
+        linter(async (view) => {
+          const { jsonParseLinter } = await import("@codemirror/lang-json");
+          return jsonParseLinter()(view);
+        }),
+      ];
+    },
+  },
+  {
+    id: "spellcheck",
+    name: "Spell Checker",
+    description: "System spell checking in Markdown and plain-text files.",
+    category: "Editing",
+    icon: "BookOpen",
+    color: "#519aba",
+    version: "1.0.0",
+    defaultEnabled: false,
+    editor: ({ langId }) =>
+      langId === "markdown" || langId === "plaintext" ? EditorView.contentAttributes.of({ spellcheck: "true", autocorrect: "on" }) : [],
+  },
+  {
+    id: "prettier",
+    name: "Prettier",
+    description: "Opinionated formatter for JS, TS, JSON, CSS, HTML, Markdown and YAML.",
+    details: ["Format Document — Shift+Alt+F", "Optional format on save"],
+    category: "Formatting",
+    icon: "Paintbrush",
+    color: "#c596c7",
+    version: "3.x",
+    defaultEnabled: true,
+    commands: ["editor.format"],
+    settings: [
+      { key: "formatOnSave", label: "Format on save", type: "boolean", default: false },
+      { key: "printWidth", label: "Print width", type: "number", default: 100, min: 40, max: 200 },
+      { key: "semi", label: "Semicolons", type: "boolean", default: true },
+      { key: "singleQuote", label: "Single quotes", type: "boolean", default: false },
+      {
+        key: "trailingComma",
+        label: "Trailing commas",
+        type: "select",
+        default: "all",
+        options: [
+          { value: "all", label: "All" },
+          { value: "es5", label: "ES5" },
+          { value: "none", label: "None" },
+        ],
+      },
+    ],
+  },
+  {
+    id: "markdown-preview",
+    name: "Markdown Preview",
+    description: "Live rendered preview of Markdown files, side by side.",
+    category: "Previews",
+    icon: "Eye",
+    color: "#519aba",
+    version: "1.0.0",
+    defaultEnabled: true,
+    commands: ["markdown.preview"],
+  },
+  {
+    id: "image-preview",
+    name: "Image Preview",
+    description: "Opens PNG, JPG, GIF and WebP files as images with zoom.",
+    category: "Previews",
+    icon: "Image",
+    color: "#a074c4",
+    version: "1.0.0",
+    defaultEnabled: true,
+  },
+  {
+    id: "word-count",
+    name: "Word Count",
+    description: "Live word count in the status bar for Markdown and text.",
+    category: "Productivity",
+    icon: "Type",
+    color: "#8bc34a",
+    version: "1.0.0",
+    defaultEnabled: true,
+  },
+  {
+    id: "text-tools",
+    name: "Text Power Tools",
+    description: "Sort, dedupe, reverse and change the case of lines; insert timestamps and UUIDs.",
+    category: "Productivity",
+    icon: "Wrench",
+    color: "#ffb74d",
+    version: "1.0.0",
+    defaultEnabled: true,
+    commands: ["text.sortLines", "text.uniqueLines", "text.reverseLines", "text.upper", "text.lower", "text.title", "text.timestamp", "text.uuid", "text.lorem"],
+  },
+  {
+    id: "zen-mode",
+    name: "Zen Mode",
+    description: "Hides everything but the code. Escape or Ctrl+Alt+Z to leave.",
+    category: "Productivity",
+    icon: "Moon",
+    color: "#b388ff",
+    version: "1.0.0",
+    defaultEnabled: true,
+    commands: ["view.zen"],
+    settings: [{ key: "width", label: "Centered width (px)", type: "number", default: 900, min: 500, max: 1600, step: 50 }],
+  },
+];
+
+const LANGUAGE_EXTS: NoxExtension[] = LANGUAGES.map((l) => ({
+  id: `lang-${l.id}`,
+  name: l.name,
+  description: `Syntax highlighting, indentation and folding for ${l.name}` + (l.prettier ? " · formatter support" : "") + ".",
+  details: [`Files: ${l.extensions.map((e) => "." + e).join(", ")}${l.filenames ? ", " + l.filenames.join(", ") : ""}`],
+  category: "Languages" as const,
+  icon: "CodeXml",
+  color: "#7aa2f7",
+  version: "6.x",
+  defaultEnabled: true,
+}));
+
+export const EXTENSIONS: NoxExtension[] = [...CORE, ...LANGUAGE_EXTS];
+export const EXT_CATEGORIES: ExtCategory[] = ["Editing", "Visual", "Formatting", "Git", "Productivity", "Keymaps", "Previews", "Languages"];
+
+export const extById = (id: string) => EXTENSIONS.find((e) => e.id === id);
+
+export function isExtEnabled(id: string, s: Pick<SettingsState, "extEnabled"> = useSettings.getState()): boolean {
+  const ext = extById(id);
+  if (!ext) return false;
+  return s.extEnabled[id] ?? ext.defaultEnabled;
+}
+
+export function extSettings(id: string, s: Pick<SettingsState, "extSettings"> = useSettings.getState()): Record<string, unknown> {
+  const ext = extById(id);
+  const out: Record<string, unknown> = {};
+  for (const def of ext?.settings ?? []) out[def.key] = s.extSettings[id]?.[def.key] ?? def.default;
+  return out;
+}
+
+/** All CodeMirror extensions the enabled built-ins contribute for one buffer. */
+export function editorExtensionsFor(
+  ctx: Omit<ExtContext, "settings">,
+  s: Pick<SettingsState, "extEnabled" | "extSettings"> = useSettings.getState(),
+): Extension[] {
+  const out: Extension[] = [];
+  for (const ext of CORE) {
+    if (!ext.editor || !isExtEnabled(ext.id, s)) continue;
+    try {
+      out.push(ext.editor({ ...ctx, settings: extSettings(ext.id, s) }));
+    } catch (e) {
+      console.error(`Extension ${ext.id} failed`, e);
+    }
+  }
+  return out;
+}

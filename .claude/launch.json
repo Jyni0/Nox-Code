@@ -1,0 +1,6 @@
+{
+  "version": "1.1.1",
+  "configurations": [
+    { "name": "nox-web", "runtimeExecutable": "npm", "runtimeArgs": ["run", "dev"], "port": 1439 }
+  ]
+}

@@ -205,13 +205,23 @@ export function TitleBar() {
   const [menusShown, setMenusShown] = useState(false);
   const [actionsShown, setActionsShown] = useState(false);
   const [maximized, setMaximized] = useState(false);
+  // Full screen on macOS hides the traffic lights, so their corner is free.
+  const [fullscreen, setFullscreen] = useState(false);
   const barRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let un: (() => void) | undefined;
-    void appWindow.isMaximized().then(setMaximized);
-    void appWindow.onResized(() => void appWindow.isMaximized().then(setMaximized)).then((f) => (un = f));
-    return () => un?.();
+    const sync = () => {
+      void appWindow.isMaximized().then(setMaximized);
+      void appWindow.isFullscreen().then(setFullscreen);
+    };
+    sync();
+    void appWindow.onResized(sync).then((f) => (un = f));
+    document.addEventListener("fullscreenchange", sync);
+    return () => {
+      un?.();
+      document.removeEventListener("fullscreenchange", sync);
+    };
   }, []);
 
   useEffect(() => {
@@ -239,7 +249,7 @@ export function TitleBar() {
   return (
     <div ref={barRef} data-tauri-drag-region data-testid="title-bar" className="relative flex h-[38px] shrink-0 select-none items-center bg-[var(--bg-titlebar)]">
       {/* macOS draws its traffic lights over this corner. */}
-      <div className={cx("flex h-full items-center gap-0.5", isMac ? "pl-[78px]" : "pl-3")}>
+      <div className={cx("flex h-full items-center gap-0.5", isMac && !fullscreen ? "pl-[84px]" : "pl-3")}>
         <span data-tauri-drag-region className="mr-2 text-[13px] font-semibold tracking-tight bg-[var(--text-muted)] bg-clip-text text-transparent" data-testid="app-name">
           Nox Code
         </span>

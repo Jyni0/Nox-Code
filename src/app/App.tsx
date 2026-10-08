@@ -35,21 +35,44 @@ import { loadSession, restoreTabs, saveSession } from "./session";
 const STROKE = { thin: "1.25", regular: "1.6", bold: "2.1" } as const;
 
 /** Theme, fonts, zoom and icon weight → CSS variables. */
+/**
+ * Line height in whole device pixels. A fractional one (14px × 1.6 at 125 %
+ * display scaling, or with the UI zoom) makes every line box end mid-pixel;
+ * the indent guides, drawn per line, then show seams and look dashed.
+ */
+function snappedLineHeight(fontSize: number, ratio: number, zoom: number): string {
+  const device = (window.devicePixelRatio || 1) * (zoom || 1);
+  return `${Math.max(1, Math.round(fontSize * ratio * device)) / device}px`;
+}
+
+/** Re-renders when the window moves to a screen with another scaling. */
+function useDevicePixelRatio(): number {
+  const [dpr, setDpr] = useState(() => window.devicePixelRatio || 1);
+  useEffect(() => {
+    const mq = window.matchMedia(`(resolution: ${dpr}dppx)`);
+    const on = () => setDpr(window.devicePixelRatio || 1);
+    mq.addEventListener?.("change", on);
+    return () => mq.removeEventListener?.("change", on);
+  }, [dpr]);
+  return dpr;
+}
+
 function useAppearance() {
   const theme = useActiveTheme();
   const s = useSettings();
+  const dpr = useDevicePixelRatio();
   useEffect(() => applyTheme(theme), [theme]);
   useEffect(() => {
     const st = document.documentElement.style;
     st.setProperty("--editor-font", s.fontFamily);
     st.setProperty("--editor-font-size", `${s.fontSize}px`);
-    st.setProperty("--editor-line-height", String(s.lineHeight));
+    st.setProperty("--editor-line-height", snappedLineHeight(s.fontSize, s.lineHeight, s.uiScale));
     st.setProperty("--editor-ligatures", s.ligatures ? "contextual" : "none");
     st.setProperty("--editor-features", s.ligatures ? '"calt" 1, "liga" 1' : '"calt" 0, "liga" 0');
     st.setProperty("--font-ui", `${s.uiFont}, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`);
     st.setProperty("--icon-stroke", STROKE[s.iconWeight]);
     requestAnimationFrame(() => viewRegistry.all().forEach((v) => v.requestMeasure()));
-  }, [s.fontFamily, s.fontSize, s.lineHeight, s.ligatures, s.uiFont, s.iconWeight]);
+  }, [s.fontFamily, s.fontSize, s.lineHeight, s.ligatures, s.uiFont, s.iconWeight, s.uiScale, dpr]);
   // Follow the OS light / dark setting.
   useEffect(() => {
     if (!s.followSystem) return;

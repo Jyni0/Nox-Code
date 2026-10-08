@@ -9,6 +9,7 @@ import { useWorkspace } from "./workspace";
 import { useProject } from "./project";
 import { errorMessage, toast, useUi } from "./ui";
 import type { ShellProfile } from "@/lib/types";
+import { clipboardKeys, terminalLinkProvider } from "@/terminal/links";
 
 export interface TermInfo {
   id: string;
@@ -139,6 +140,8 @@ export const useTerminal = create<TerminalState>((set, get) => ({
     });
     const fit = new FitAddon();
     term.loadAddon(fit);
+    term.attachCustomKeyEventHandler(clipboardKeys(term));
+    term.registerLinkProvider(terminalLinkProvider(term, () => get().terms.find((t) => t.id === id)?.cwd ?? dir));
     const host = document.createElement("div");
     host.style.cssText = "width:100%;height:100%;";
     // term.open() happens when the view first attaches the host to the DOM.

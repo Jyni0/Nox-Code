@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, Maximize2, Minimize2, Plus, Settings2, SquareTerminal, Trash2 } from "lucide-react";
+import { Check, ChevronDown, ClipboardPaste, Copy, Eraser, Maximize2, Minimize2, Plus, Settings2, SquareTerminal, TextSelect, Trash2 } from "lucide-react";
+import { copySelection, pasteInto } from "@/terminal/links";
 import { CUSTOM_PROFILE, useTerminal } from "@/stores/terminal";
 import { useSettings } from "@/stores/settings";
 import { islandCorners, useWindowEdges } from "@/components/layout/islands";
 import { useUi } from "@/stores/ui";
-import { IconButton, RowMenu, cx, useWheelX, type MenuItem } from "@/components/ui";
+import { ContextMenu, IconButton, RowMenu, cx, useWheelX, type MenuItem } from "@/components/ui";
 
 /** "+" opens the default shell; the arrow next to it picks any installed one. */
 function NewTerminalButton() {
@@ -81,7 +82,33 @@ function TerminalHost({ id, visible }: { id: string; visible: boolean }) {
       live?.term.focus();
     });
   }, [visible, id]);
-  return <div ref={ref} className={cx("absolute inset-0", !visible && "invisible")} data-testid="terminal-host" />;
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const items = (): MenuItem[] => {
+    const term = useTerminal.getState().live(id)?.term;
+    if (!term) return [];
+    const done = () => term.focus();
+    return [
+      { icon: <Copy size={14} />, label: "Copy", combo: "Ctrl+C", disabled: !term.hasSelection(), onClick: () => void copySelection(term).then(done) },
+      { icon: <ClipboardPaste size={14} />, label: "Paste", combo: "Ctrl+V", onClick: () => void pasteInto(term).then(done) },
+      { icon: <TextSelect size={14} />, label: "Select All", onClick: () => (term.selectAll(), done()) },
+      "separator",
+      { icon: <Eraser size={14} />, label: "Clear", onClick: () => (term.clear(), done()) },
+    ];
+  };
+  return (
+    <>
+      <div
+        ref={ref}
+        className={cx("absolute inset-0", !visible && "invisible")}
+        data-testid="terminal-host"
+        onContextMenu={(e) => {
+          e.preventDefault();
+          setMenu({ x: e.clientX, y: e.clientY });
+        }}
+      />
+      <ContextMenu at={menu} items={menu ? items() : []} onClose={() => setMenu(null)} />
+    </>
+  );
 }
 
 export function TerminalPanel() {

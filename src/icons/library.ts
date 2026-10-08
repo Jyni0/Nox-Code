@@ -13,7 +13,7 @@ import {
   Hexagon, Image, Infinity as InfinityIcon, Key, Lamp, Layers, LayoutGrid, Leaf, Lightbulb, Link, List, ListChecks, ListTree, Lock,
   Magnet, Mail, Map, Microscope, Monitor, Moon, Mountain, Music, Orbit, Package, Palette, Paintbrush, Paperclip, PenTool, Pencil, Percent,
   Pilcrow, Pizza, Plug, Puzzle, Quote, Rabbit, Radar, Radiation, Regex, Rocket, Ruler, Satellite, Scale, Server, Settings, Settings2,
-  Shapes, Shield, ShieldCheck, Ship, Sigma, Skull, Smartphone, Snowflake, Sparkles, Square, SquareFunction, SquareTerminal, Star, Sun,
+  Shapes, Shield, ShieldAlert, ShieldCheck, Ship, Sigma, Skull, Smartphone, Snowflake, Sparkles, Square, SquareFunction, SquareTerminal, Star, Sun,
   Table, Tag, Target, Telescope, Terminal, TestTube, Trash2, TreePine, Triangle, Trophy, Turtle, Type, Variable, Video, WandSparkles,
   Waves, Webhook, Wind, Workflow, Wrench, Zap,
   type LucideIcon,
@@ -30,7 +30,7 @@ export const ICON_LIBRARY: Record<string, LucideIcon> = {
   Hexagon, Image, Infinity: InfinityIcon, Key, Lamp, Layers, LayoutGrid, Leaf, Lightbulb, Link, List, ListChecks, ListTree, Lock,
   Magnet, Mail, Map, Microscope, Monitor, Moon, Mountain, Music, Orbit, Package, Palette, Paintbrush, Paperclip, PenTool, Pencil, Percent,
   Pilcrow, Pizza, Plug, Puzzle, Quote, Rabbit, Radar, Radiation, Regex, Rocket, Ruler, Satellite, Scale, Server, Settings, Settings2,
-  Shapes, Shield, ShieldCheck, Ship, Sigma, Skull, Smartphone, Snowflake, Sparkles, Square, SquareFunction, SquareTerminal, Star, Sun,
+  Shapes, Shield, ShieldAlert, ShieldCheck, Ship, Sigma, Skull, Smartphone, Snowflake, Sparkles, Square, SquareFunction, SquareTerminal, Star, Sun,
   Table, Tag, Target, Telescope, Terminal, TestTube, Trash2, TreePine, Triangle, Trophy, Turtle, Type, Variable, Video, WandSparkles,
   Waves, Webhook, Wind, Workflow, Wrench, Zap,
 };

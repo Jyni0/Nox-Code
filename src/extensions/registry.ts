@@ -5,7 +5,7 @@
 import { Prec, EditorState, type Extension } from "@codemirror/state";
 import { EditorView, highlightTrailingWhitespace, keymap } from "@codemirror/view";
 import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap } from "@codemirror/autocomplete";
-import { codeFolding, foldGutter, foldKeymap } from "@codemirror/language";
+import { codeFolding, foldGutter, foldKeymap, syntaxTree } from "@codemirror/language";
 import { highlightSelectionMatches } from "@codemirror/search";
 import { lintGutter, linter } from "@codemirror/lint";
 import { vim } from "@replit/codemirror-vim";
@@ -15,6 +15,7 @@ import { LANGUAGES } from "@/editor/languages";
 import { useSettings, type SettingsState } from "@/stores/settings";
 import { RAINBOW_PALETTES, colorPreview, gitGutter, rainbowBrackets, todoHighlighter } from "./editorFeatures";
 import { universalCompletion } from "@/editor/intel/completion";
+import { syntaxDiagnostics } from "@/editor/intel/syntaxErrors";
 import { ctrlClickNavigation, hoverCards, intelContext } from "@/editor/intel/navigation";
 
 export type ExtCategory = "Editing" | "Visual" | "Formatting" | "Git" | "Productivity" | "Keymaps" | "Previews" | "Languages";
@@ -351,6 +352,30 @@ const CORE: NoxExtension[] = [
         }),
       ];
     },
+  },
+  {
+    id: "syntax-errors",
+    name: "Syntax Errors",
+    description: "Underlines syntax errors as you type, in every language — unexpected tokens, missing brackets, unclosed blocks.",
+    details: [
+      "TypeScript, JavaScript, Python, Rust, Go, C/C++, Java, PHP, HTML, CSS, XML, YAML: errors from the language's parser",
+      "Lua, Ruby, C#, Kotlin, Swift, PowerShell and other languages: unbalanced brackets outside strings and comments",
+      "Hover the underline or the gutter mark to read the error; F8 jumps to the next one",
+    ],
+    category: "Editing",
+    icon: "ShieldAlert",
+    color: "#f07178",
+    version: "1.0.0",
+    defaultEnabled: true,
+    settings: [{ key: "delay", label: "Check after typing pause (ms)", type: "number", default: 600, min: 100, max: 5000, step: 100 }],
+    editor: ({ langId, path, settings }) => [
+      lintGutter(),
+      linter((view) => syntaxDiagnostics(view.state, langId, path), {
+        delay: Number(settings.delay) || 600,
+        // Re-check once the lazily loaded parser has produced a tree.
+        needsRefresh: (u) => syntaxTree(u.startState) !== syntaxTree(u.state),
+      }),
+    ],
   },
   {
     id: "spellcheck",

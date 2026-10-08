@@ -19,6 +19,9 @@ export const appWindow = {
   async isMaximized() {
     return inTauri ? (await win()).isMaximized() : false;
   },
+  async isFullscreen() {
+    return inTauri ? (await win()).isFullscreen() : !!document.fullscreenElement;
+  },
   async onResized(cb: () => void): Promise<() => void> {
     if (!inTauri) return () => {};
     return (await win()).onResized(cb);

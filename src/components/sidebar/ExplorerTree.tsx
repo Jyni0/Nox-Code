@@ -19,6 +19,15 @@ import { copyText, createEntry, deleteEntry, duplicateEntry, moveEntry, renameEn
 const ROW_H = 28;
 const INDENT = 18;
 
+let measureCtx: CanvasRenderingContext2D | null = null;
+/** Width of a tree name in the row font, without laying anything out. */
+function nameWidth(text: string, font: string): number {
+  measureCtx ??= document.createElement("canvas").getContext("2d");
+  if (!measureCtx) return text.length * 8;
+  measureCtx.font = font;
+  return measureCtx.measureText(text).width;
+}
+
 type Row = { kind: "entry"; entry: DirEntry; depth: number } | { kind: "create"; parent: string; depth: number; mode: "file" | "folder" };
 
 function statusColor(code: string): string {
@@ -131,6 +140,17 @@ export function ExplorerTree() {
     else if (top + ROW_H > el.scrollTop + el.clientHeight) el.scrollTop = top + ROW_H - el.clientHeight;
   }, [selected, rows]);
 
+  // Long names scroll sideways instead of being cut: the content is as wide as the widest row.
+  const contentW = useMemo(() => {
+    const font = `13.5px ${scrollRef.current ? getComputedStyle(scrollRef.current).fontFamily : "sans-serif"}`;
+    let w = 0;
+    for (const r of rows) {
+      const name = r.kind === "entry" ? r.entry.name : "";
+      // padding + icon + gap + name + git badge + right padding
+      w = Math.max(w, 8 + r.depth * INDENT + 16 + 8 + nameWidth(name, font) + 28 + 8);
+    }
+    return Math.ceil(w);
+  }, [rows]);
   const first = Math.max(0, Math.floor(scrollTop / ROW_H) - 8);
   const last = Math.min(rows.length, Math.ceil((scrollTop + viewH) / ROW_H) + 8);
 
@@ -254,7 +274,7 @@ export function ExplorerTree() {
       role="tree"
       tabIndex={0}
       data-testid="explorer-tree"
-      className="no-native-scrollbar relative min-h-0 flex-1 overflow-y-auto outline-none"
+      className="no-native-scrollbar relative min-h-0 flex-1 overflow-auto outline-none"
       onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
       onKeyDown={onKeyDown}
       onContextMenu={(e) => {
@@ -270,7 +290,7 @@ export function ExplorerTree() {
       onDragLeave={(e) => e.currentTarget === e.target && setDropTarget(null)}
       onDrop={(e) => void onDrop(root, e)}
     >
-      <div style={{ height: rows.length * ROW_H + 8, position: "relative" }} className={dropTarget === root ? "rounded-xl bg-[color-mix(in_srgb,var(--accent)_6%,transparent)]" : ""}>
+      <div style={{ height: rows.length * ROW_H + 8, minWidth: `max(100%, ${contentW}px)`, position: "relative" }} className={dropTarget === root ? "rounded-xl bg-[color-mix(in_srgb,var(--accent)_6%,transparent)]" : ""}>
         {rows.slice(first, last).map((row, k) => {
           const index = first + k;
           const top = index * ROW_H;
@@ -354,7 +374,7 @@ export function ExplorerTree() {
                   <span key={g} aria-hidden data-guide className="pointer-events-none absolute inset-y-0 w-px bg-[color-mix(in_srgb,var(--text-dim)_60%,transparent)]" style={{ left: 8 + g * INDENT + 7.5 }} />
                 ))}
               <FileIcon name={e.name} isDir={e.isDir} open={isOpen} size={16} />
-              <span data-testid="tree-name" className={`min-w-0 flex-1 truncate ${e.name.startsWith(".") ? "opacity-75" : ""}`} style={{ color: nameColor }}>
+              <span data-testid="tree-name" className={`flex-1 whitespace-nowrap ${e.name.startsWith(".") ? "opacity-75" : ""}`} style={{ color: nameColor }}>
                 {e.name}
               </span>
               {dirty && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--text-main)]" title="Unsaved changes" />}

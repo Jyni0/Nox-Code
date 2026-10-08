@@ -55,9 +55,23 @@ function relativeLineNumbers(): Extension {
   });
 }
 
+/**
+ * Font and line height from Settings (CSS variables set by the app). As an
+ * editor theme they outrank CodeMirror's base theme, which otherwise forces
+ * `monospace` and a line height of 1.4.
+ */
+const fontTheme = EditorView.theme({
+  ".cm-scroller": {
+    fontFamily: "var(--editor-font, var(--font-mono))",
+    fontSize: "var(--editor-font-size, 14px)",
+    lineHeight: "var(--editor-line-height, 1.6)",
+  },
+});
+
 /** Always-on basics that do not depend on settings. */
 export function baseExtensions(): Extension[] {
   return [
+    fontTheme,
     highlightSpecialChars(),
     history(),
     dropCursor(),

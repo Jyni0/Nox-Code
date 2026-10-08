@@ -5,6 +5,7 @@ import { detectLanguage, isImageFile } from "@/editor/languages";
 import { docHub } from "@/editor/docHub";
 import { insertLeaf, leaf, leafIds, setSizes, syncLayout, type LayoutNode, type Side } from "@/editor/layout";
 import { useSettings } from "./settings";
+import { effectiveFor } from "./project";
 import { errorMessage, toast, useUi } from "./ui";
 import { useWorkspace } from "./workspace";
 
@@ -478,7 +479,7 @@ export const useEditor = create<EditorStore>((set, get) => {
         path = await backend().pickSaveFile(buf.path ?? buf.name);
         if (!path) return false;
       }
-      const s = useSettings.getState();
+      const s = effectiveFor(path, buf.langId);
       let text = docHub.text(bufferId);
       for (const hook of saveHooks) {
         try {

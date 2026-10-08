@@ -11,6 +11,7 @@ export type SettingsSection =
   | "editor"
   | "typing"
   | "files"
+  | "project"
   | "terminal"
   | "keybindings"
   | "extensions"

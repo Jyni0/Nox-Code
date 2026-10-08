@@ -67,6 +67,7 @@ export function createTauriBackend(): Backend {
     },
     pickSaveFile: async (defaultPath) => (await save({ defaultPath, title: "Save As" })) ?? null,
     startupPath: () => invoke("startup_path"),
+    sourceCheckout: () => invoke<string | null>("source_checkout").catch(() => null),
     revealInExplorer: (path) => revealItemInDir(path),
     openUrl: (url) => openUrl(url),
   };

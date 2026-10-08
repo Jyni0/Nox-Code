@@ -18,10 +18,12 @@ try {
   /* storage unavailable */
 }
 
-// The default context menu ("Back / Reload / Inspect") does not belong in an editor.
+// The default context menu ("Back / Reload / Inspect") does not belong in an
+// editor: the code and the terminal never show it (the code has its own menu).
+// Plain text fields keep it for cut / copy / paste.
 window.addEventListener("contextmenu", (e) => {
   const t = e.target as HTMLElement;
-  if (!t.closest("input, textarea, .cm-content, .selectable")) e.preventDefault();
+  if (t.closest(".cm-editor, .xterm") || !t.closest("input, textarea, .selectable")) e.preventDefault();
 });
 
 void initBackend().then(() => {

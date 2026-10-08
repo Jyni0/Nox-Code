@@ -10,6 +10,7 @@ import { basename, relative } from "@/lib/path";
 import { appWindow } from "@/lib/window";
 import { FILE_MANAGER } from "@/lib/platform";
 import { activeView } from "@/editor/viewRegistry";
+import { goBack, goToDefinition, wordAtPos } from "@/editor/intel/navigation";
 import { LANGUAGES, PLAIN_TEXT, languageName } from "@/editor/languages";
 import { invalidateGitBases } from "@/editor/CodeEditor";
 import { activeTabInfo, useEditor } from "@/stores/editor";
@@ -17,10 +18,11 @@ import { allThemes, findTheme, useSettings } from "@/stores/settings";
 import { useTerminal } from "@/stores/terminal";
 import { errorMessage, toast, useUi } from "@/stores/ui";
 import { useWorkspace } from "@/stores/workspace";
+import { effectiveFor, useProject } from "@/stores/project";
+import { useUpdates } from "@/stores/updates";
 import { useSearch } from "@/stores/search";
 import { exportSettings } from "@/stores/settingsJson";
-import { extSettings } from "@/extensions/registry";
-import { canFormat, formatText } from "@/extensions/prettier";
+import { canFormat, formatText, prettierOptionsFor } from "@/extensions/prettier";
 import { ICON_THEMES } from "@/icons/iconThemes";
 import { themeSwatch } from "@/themes/apply";
 import { importTheme } from "@/themes/convert";
@@ -102,20 +104,11 @@ export async function formatActive() {
     toast(`No formatter for ${languageName(buffer.langId)}`, "warning");
     return;
   }
-  const s = settings();
-  const opts = extSettings("prettier");
   try {
     const { formatted, cursorOffset } = await formatText(
       view.state.doc.toString(),
       buffer.langId,
-      {
-        printWidth: opts.printWidth as number,
-        tabWidth: s.tabSize,
-        useTabs: !s.insertSpaces,
-        semi: opts.semi as boolean,
-        singleQuote: opts.singleQuote as boolean,
-        trailingComma: opts.trailingComma as "all",
-      },
+      prettierOptionsFor(buffer.path, buffer.langId),
       view.state.selection.main.head,
     );
     if (formatted !== view.state.doc.toString()) {
@@ -193,16 +186,24 @@ export function pickLanguage() {
 
 export function pickIndentation() {
   const s = settings();
+  const { buffer } = activeTabInfo();
+  const eff = effectiveFor(buffer?.path ?? null, buffer?.langId ?? "plaintext");
   ui().pick({
     placeholder: "Indentation",
-    activeId: `${s.insertSpaces ? "spaces" : "tabs"}-${s.tabSize}`,
+    activeId: `${eff.insertSpaces ? "spaces" : "tabs"}-${eff.tabSize}`,
     items: [2, 4, 8].flatMap((n) => [
       { id: `spaces-${n}`, label: `Spaces: ${n}`, group: "Indent using spaces" },
       { id: `tabs-${n}`, label: `Tab size: ${n}`, group: "Indent using tabs" },
     ]),
     onAccept: (it) => {
       const [kind, n] = it.id.split("-");
-      s.patch({ insertSpaces: kind === "spaces", tabSize: Number(n) });
+      const value = { insertSpaces: kind === "spaces", tabSize: Number(n) };
+      // A project that pins indentation keeps the change in its own file.
+      const p = useProject.getState();
+      const lang = buffer ? p.settings.languages?.[buffer.langId] : undefined;
+      if (buffer && (lang?.tabSize !== undefined || lang?.insertSpaces !== undefined)) void p.setLanguage(buffer.langId, value);
+      else if (p.root && (p.settings.tabSize !== undefined || p.settings.insertSpaces !== undefined)) void p.update(value);
+      else s.patch(value);
     },
   });
 }
@@ -369,6 +370,37 @@ export function registerAppCommands() {
       run: () => {
         const v = activeView();
         if (v) openSearchPanel(v);
+      },
+    },
+    {
+      id: "editor.goToDefinition",
+      title: "Go to Definition",
+      category: "Editor",
+      keybinding: "F12",
+      extension: "code-navigation",
+      run: () => {
+        const v = activeView();
+        if (v) void goToDefinition(v);
+      },
+    },
+    { id: "editor.goBack", title: "Go Back", category: "Editor", keybinding: "Alt+Left", extension: "code-navigation", run: () => void goBack() },
+    {
+      id: "editor.findReferences",
+      title: "Find All References",
+      category: "Editor",
+      keybinding: "Shift+F12",
+      extension: "code-navigation",
+      run: () => {
+        const v = activeView();
+        const { buffer } = activeTabInfo();
+        if (!v || !buffer) return;
+        const sel = v.state.selection.main;
+        const w = sel.empty ? wordAtPos(v.state, sel.head, buffer.langId)?.text : v.state.sliceDoc(sel.from, sel.to);
+        if (!w || w.includes("\n")) return;
+        useSearch.getState().patch({ wholeWord: true, regex: false, caseSensitive: true });
+        useSearch.getState().seed({ text: w });
+        ed().openSearch();
+        void useSearch.getState().run();
       },
     },
     {
@@ -626,6 +658,8 @@ export function registerAppCommands() {
 
     /* ---- Help ---- */
     { id: "help.about", title: "About Nox Code", category: "Help", run: () => ui().openSettings("about") },
+    { id: "settings.project", title: "Project Settings", category: "Preferences", when: () => !!ws().root, run: () => ui().openSettings("project") },
+    { id: "help.checkUpdates", title: "Check for Updates…", category: "Help", run: () => void useUpdates.getState().check(true) },
     { id: "help.welcome", title: "Welcome", category: "Help", run: () => useEditor.setState((s) => ({ panes: s.panes.map((p) => (p.id === s.activePaneId ? { ...p, activeTabId: null } : p)) })) },
   ];
   registerCommands(cmds);

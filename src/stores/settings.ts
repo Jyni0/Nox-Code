@@ -62,6 +62,8 @@ export interface SettingsState {
   titleActions: "bar" | "compact";
   previewTabs: boolean;
   restoreSession: boolean;
+  /** Look for new commits on GitHub at start and every few hours. */
+  checkForUpdates: boolean;
   confirmDelete: boolean;
   filesExclude: string;
 
@@ -123,6 +125,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   titleActions: "bar",
   previewTabs: true,
   restoreSession: true,
+  checkForUpdates: true,
   confirmDelete: true,
   filesExclude: ".git, .DS_Store, Thumbs.db",
 

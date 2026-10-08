@@ -3,6 +3,7 @@ import { backend } from "@/lib/backend";
 import type { DirEntry, GitFile, GitInfo } from "@/lib/types";
 import { basename, dirname, isInside, join, relative, samePath } from "@/lib/path";
 import { useSettings } from "./settings";
+import { useProject } from "./project";
 import { errorMessage, toast } from "./ui";
 
 export interface PendingEdit {
@@ -72,11 +73,13 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     const b = backend();
     set({ root: path, children: {}, expanded: { [path]: true }, selected: null, git: null, gitDecorations: {}, fileList: null, loading: true });
     useSettings.getState().pushRecent(path);
+    void useProject.getState().load(path);
     try {
       await get().loadDir(path);
     } catch (e) {
       toast(`Cannot open folder: ${errorMessage(e)}`, "error");
       set({ root: null, loading: false });
+      void useProject.getState().load(null);
       useSettings.getState().removeRecent(path);
       return;
     }
@@ -87,6 +90,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
 
   async closeFolder() {
     await backend().unwatch().catch(() => {});
+    void useProject.getState().load(null);
     set({ root: null, children: {}, expanded: {}, selected: null, git: null, gitDecorations: {}, fileList: null });
   },
 

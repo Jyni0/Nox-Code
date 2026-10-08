@@ -411,6 +411,9 @@ export function createMemoryBackend(opts: MemoryOptions = {}): Backend & { fs: M
     async startupPath() {
       return root;
     },
+    async sourceCheckout() {
+      return null;
+    },
     async revealInExplorer() {},
     async openUrl(url) {
       window.open(url, "_blank", "noreferrer");

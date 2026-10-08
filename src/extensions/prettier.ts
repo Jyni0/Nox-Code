@@ -1,5 +1,7 @@
 /** Prettier (standalone) — loaded on first use so it costs nothing at startup. */
 import { languageById, languageName } from "@/editor/languages";
+import { effectiveFor } from "@/stores/project";
+import { extSettings } from "./registry";
 
 export interface PrettierOptions {
   printWidth: number;
@@ -58,4 +60,23 @@ export async function formatText(
     trailingComma: opts.trailingComma,
   });
   return { formatted: res.formatted, cursorOffset: Math.max(0, res.cursorOffset) };
+}
+
+/** Prettier options for one file: extension settings, then project overrides. */
+export function prettierOptionsFor(path: string | null, langId: string): PrettierOptions {
+  const o = extSettings("prettier");
+  const e = effectiveFor(path, langId);
+  return {
+    printWidth: e.printWidth ?? (o.printWidth as number),
+    tabWidth: e.tabSize,
+    useTabs: !e.insertSpaces,
+    semi: e.semi ?? (o.semi as boolean),
+    singleQuote: e.singleQuote ?? (o.singleQuote as boolean),
+    trailingComma: o.trailingComma as PrettierOptions["trailingComma"],
+  };
+}
+
+/** Format on save: the project (or its language block) can turn it on or off. */
+export function formatOnSaveFor(path: string | null, langId: string): boolean {
+  return effectiveFor(path, langId).formatOnSave ?? !!extSettings("prettier").formatOnSave;
 }

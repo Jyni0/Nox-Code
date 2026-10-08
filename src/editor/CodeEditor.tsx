@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Compartment, EditorSelection, EditorState, type Extension } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { getCM } from "@replit/codemirror-vim";
@@ -12,8 +12,11 @@ import { useEditor, type Buffer } from "@/stores/editor";
 import { useSettings } from "@/stores/settings";
 import { useCursor } from "@/stores/cursor";
 import { useWorkspace } from "@/stores/workspace";
+import { useProject } from "@/stores/project";
 import { backend } from "@/lib/backend";
 import { relative } from "@/lib/path";
+import type { MenuItem } from "@/components/ui/Menus";
+import { EditorMenu, editorMenuItems, placeCaretForMenu } from "./EditorMenu";
 
 const langComp = new Compartment();
 const extComp = new Compartment();
@@ -72,6 +75,7 @@ export function CodeEditor({ paneId, buffer, active }: { paneId: string; buffer:
   const shownRef = useRef<string | null>(null);
   const activeRef = useRef(active);
   activeRef.current = active;
+  const [menu, setMenu] = useState<{ at: { x: number; y: number }; items: MenuItem[] } | null>(null);
 
   const reportCursor = (view: EditorView) => {
     if (!activeRef.current) return;
@@ -94,7 +98,7 @@ export function CodeEditor({ paneId, buffer, active }: { paneId: string; buffer:
     return [
       langComp.of(languageExtension(b.langId, onLangLoaded)),
       extComp.of(editorExtensionsFor({ bufferId: b.id, langId: b.langId, path: b.path })),
-      settingsComp.of(settingsExtensions(pickEditorSettings(s))),
+      settingsComp.of(settingsExtensions(pickEditorSettings(s, b))),
     ];
   };
 
@@ -127,7 +131,7 @@ export function CodeEditor({ paneId, buffer, active }: { paneId: string; buffer:
       effects: [
         langComp.reconfigure(languageExtension(b.langId, () => reconfigureLanguage(viewRef.current, b))),
         extComp.reconfigure(editorExtensionsFor({ bufferId: b.id, langId: b.langId, path: b.path })),
-        settingsComp.reconfigure(settingsExtensions(pickEditorSettings(s))),
+        settingsComp.reconfigure(settingsExtensions(pickEditorSettings(s, b))),
       ],
     });
   };
@@ -235,6 +239,19 @@ export function CodeEditor({ paneId, buffer, active }: { paneId: string; buffer:
     [],
   );
 
+  // Project settings (.nox/settings.json, .editorconfig) changed.
+  useEffect(
+    () =>
+      useProject.subscribe((s, p) => {
+        const view = viewRef.current;
+        if (!view || !shownRef.current || s.version === p.version) return;
+        const b = useEditor.getState().buffers[shownRef.current];
+        if (b) reconfigureAll(view, b);
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
   // Jump requests (search results, go to line) for the shown buffer.
   const reveal = useEditor((s) => s.pendingReveal[buffer.id]);
   useEffect(() => {
@@ -254,5 +271,23 @@ export function CodeEditor({ paneId, buffer, active }: { paneId: string; buffer:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
 
-  return <div ref={hostRef} className="h-full min-h-0 w-full" data-testid="code-editor" />;
+  return (
+    <>
+      <div
+        ref={hostRef}
+        className="h-full min-h-0 w-full"
+        data-testid="code-editor"
+        onContextMenu={(e) => {
+          const view = viewRef.current;
+          e.preventDefault();
+          if (!view || !(e.target as HTMLElement).closest(".cm-content, .cm-line, .cm-scroller")) return;
+          const pos = view.posAtCoords({ x: e.clientX, y: e.clientY }) ?? view.state.selection.main.head;
+          placeCaretForMenu(view, pos);
+          view.focus();
+          setMenu({ at: { x: e.clientX, y: e.clientY }, items: editorMenuItems(view, buffer.langId, pos) });
+        }}
+      />
+      <EditorMenu at={menu?.at ?? null} items={menu?.items ?? []} onClose={() => setMenu(null)} />
+    </>
+  );
 }

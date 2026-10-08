@@ -1,6 +1,6 @@
 import { useContext, useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
-import { Braces, Brush, FolderTree, Info, Keyboard, Palette, PanelsTopLeft, Puzzle, Save, Search, Shapes, SquareCode, SquareTerminal, X, type LucideIcon } from "lucide-react";
+import { Braces, Brush, FileCog, FolderTree, Info, Keyboard, Palette, PanelsTopLeft, Puzzle, Save, Search, Shapes, SquareCode, SquareTerminal, X, type LucideIcon } from "lucide-react";
 import { useUi, type SettingsSection } from "@/stores/ui";
 import { DEFAULT_SETTINGS, allThemes, useSettings } from "@/stores/settings";
 import { EXTENSIONS, EXT_CATEGORIES, isExtEnabled } from "@/extensions/registry";
@@ -14,9 +14,11 @@ import { CUSTOM_PROFILE, useTerminal } from "@/stores/terminal";
 import { exportSettings, importSettings } from "@/stores/settingsJson";
 import { errorMessage, toast } from "@/stores/ui";
 import { copyText } from "@/app/fileOps";
+import { APP_VERSION, BUILD_SHA, REPO, openUpdateDialog, useUpdates } from "@/stores/updates";
 import { ThemeStudio } from "./ThemeStudio";
 import { IconsSettings } from "./IconsSettings";
 import { KeybindingsSettings } from "./KeybindingsSettings";
+import { ProjectSettings } from "./ProjectSettings";
 import { CodePreview, ThemeThumb } from "./shared";
 
 const NAV: Array<{ group: string; items: Array<{ id: SettingsSection; label: string; icon: LucideIcon }> }> = [
@@ -33,6 +35,7 @@ const NAV: Array<{ group: string; items: Array<{ id: SettingsSection; label: str
       { id: "editor", label: "Text Editor", icon: SquareCode },
       { id: "typing", label: "Typing & Saving", icon: Save },
       { id: "files", label: "Files & Explorer", icon: FolderTree },
+      { id: "project", label: "This Project", icon: FileCog },
     ],
   },
   {
@@ -58,6 +61,7 @@ const TITLES: Record<SettingsSection, [string, string]> = {
   editor: ["Text Editor", "How code looks: font, line numbers, cursor"],
   typing: ["Typing & Saving", "Indentation and what happens on save"],
   files: ["Files & Explorer", "The file tree, tabs and sessions"],
+  project: ["This Project", "Tabs, formatting and save rules for the open folder — saved in .nox/settings.json"],
   terminal: ["Terminal", "The integrated terminal"],
   keybindings: ["Keyboard Shortcuts", "Click the pencil, press the new keys, Enter to save"],
   themes: ["Theme Studio", "Edit every color, import VS Code themes, generate your own"],
@@ -575,6 +579,40 @@ function ExtensionsSettings() {
   );
 }
 
+function UpdatesCard() {
+  const [auto, setAuto] = useS("checkForUpdates");
+  const status = useUpdates((s) => s.status);
+  const ahead = useUpdates((s) => s.info?.aheadBy ?? 0);
+  const checkedAt = useUpdates((s) => s.checkedAt);
+  const error = useUpdates((s) => s.error);
+  const hint =
+    status === "checking" ? "Checking GitHub…"
+    : status === "available" ? `${ahead} new commit${ahead === 1 ? "" : "s"} on GitHub`
+    : status === "current" ? `Up to date${checkedAt ? ` · checked ${new Date(checkedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : ""}`
+    : status === "error" ? `Check failed: ${error}`
+    : REPO ? `Compares this build with the main branch of github.com/${REPO}` : "This build does not know its GitHub repository";
+  return (
+    <SettingsCard>
+      <SettingRow title="Updates" hint={hint} keywords="update version github new check upgrade">
+        <div className="flex gap-1.5">
+          {status === "available" ? (
+            <Button size="sm" variant="primary" data-testid="about-update" onClick={openUpdateDialog}>
+              Update…
+            </Button>
+          ) : (
+            <Button size="sm" variant="secondary" disabled={status === "checking" || !REPO} onClick={() => void useUpdates.getState().check(true)}>
+              Check for updates
+            </Button>
+          )}
+        </div>
+      </SettingRow>
+      <SettingRow title="Check automatically" hint="On start and every 6 hours" keywords="update github">
+        <Switch on={auto} onChange={setAuto} ariaLabel="Check for updates automatically" />
+      </SettingRow>
+    </SettingsCard>
+  );
+}
+
 function About() {
   const [json, setJson] = useState<string | null>(null);
   return (
@@ -584,7 +622,10 @@ function About() {
           <NoxMark size={56} />
           <div>
             <div className="text-[22px] font-semibold text-[var(--text-main)]">Nox Code</div>
-            <div className="text-[12.5px] text-[var(--text-dim)]">Version 0.2.0 · {inTauri ? "Desktop" : "Browser preview"}</div>
+            <div className="text-[12.5px] text-[var(--text-dim)]">
+              Version {APP_VERSION}
+              {BUILD_SHA ? ` · ${BUILD_SHA.slice(0, 7)}` : ""} · {inTauri ? "Desktop" : "Browser preview"}
+            </div>
           </div>
         </div>
         <div className="text-[12.5px] leading-relaxed text-[var(--text-muted)]">
@@ -592,6 +633,7 @@ function About() {
           soft design language of Singularity.
         </div>
       </SettingsCard>
+      <UpdatesCard />
       <SettingsCard>
         <SettingRow title="Settings as JSON" hint="Copy them to move to another computer or keep a backup; paste JSON back to apply it." keywords="export import backup copy paste json sync">
           <div className="flex gap-1.5">
@@ -667,6 +709,7 @@ const SEARCHABLE: Array<[SettingsSection, () => React.ReactNode]> = [
   ["editor", () => <EditorSettings />],
   ["typing", () => <TypingSettings />],
   ["files", () => <FilesSettings />],
+  ["project", () => <ProjectSettings />],
   ["terminal", () => <TerminalSettings />],
   ["about", () => <About />],
 ];
@@ -797,6 +840,7 @@ export function SettingsModal() {
                 {section === "editor" && <EditorSettings />}
                 {section === "typing" && <TypingSettings />}
                 {section === "files" && <FilesSettings />}
+                {section === "project" && <ProjectSettings />}
                 {section === "terminal" && <TerminalSettings />}
                 {section === "keybindings" && <KeybindingsSettings />}
                 {section === "themes" && <ThemeStudio />}

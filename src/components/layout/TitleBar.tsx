@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Copy, Ellipsis, FolderTree, GitBranch, Menu, Minus, Puzzle, Settings, Square, X, type LucideIcon } from "lucide-react";
+import { ArrowDownToLine, Copy, Ellipsis, FolderTree, GitBranch, Menu, Minus, Puzzle, Settings, Square, X, type LucideIcon } from "lucide-react";
 import { appWindow } from "@/lib/window";
 import { getCommand, keysFor, runCommand } from "@/core/commands";
 import { useSettings } from "@/stores/settings";
@@ -9,6 +9,7 @@ import { useWorkspace } from "@/stores/workspace";
 import { EXTENSIONS, isExtEnabled } from "@/extensions/registry";
 import { isMac } from "@/lib/keys";
 import { Kbd, cx } from "@/components/ui";
+import { openUpdateDialog, useUpdateAvailable, useUpdates } from "@/stores/updates";
 
 type Entry = string | "-";
 
@@ -18,7 +19,7 @@ const MENUS: Record<string, Entry[]> = {
   Edit: ["editor.find", "view.search", "-", "editor.toggleComment", "editor.selectAllOccurrences", "-", "editor.format", "editor.changeIndentation", "editor.changeEol", "-", "text.sortLines", "text.uniqueLines", "text.upper", "text.lower"],
   View: ["workbench.commandPalette", "workbench.quickOpen", "editor.gotoLine", "-", "view.toggleSidebar", "view.sidebarSide", "view.toggleIslands", "view.toggleStatusBar", "view.toggleBreadcrumbs", "editor.toggleWordWrap", "-", "editor.split", "editor.splitDown", "view.zen", "view.fullscreen", "-", "settings.theme", "settings.iconTheme", "settings.toggleLightDark", "-", "view.zoomIn", "view.zoomOut", "view.zoomReset"],
   Terminal: ["terminal.new", "terminal.newWithShell", "terminal.toggle", "-", "terminal.runSelection", "terminal.kill"],
-  Help: ["help.welcome", "settings.keybindings", "-", "view.reload", "help.about"],
+  Help: ["help.welcome", "settings.keybindings", "-", "help.checkUpdates", "view.reload", "help.about"],
 };
 
 const VIEWS: Array<{ id: SideView; label: string; icon: LucideIcon; command: string }> = [
@@ -75,6 +76,32 @@ function ViewSwitcher({ onPick }: { onPick?: () => void }) {
         );
       })}
     </div>
+  );
+}
+
+/** Shown while main on GitHub has commits this build does not. */
+function UpdateButton() {
+  const available = useUpdateAvailable();
+  const version = useUpdates((s) => s.info?.version);
+  const ahead = useUpdates((s) => s.info?.aheadBy ?? 0);
+  return (
+    <AnimatePresence>
+      {available && (
+        <motion.button
+          data-testid="update-button"
+          title={`${ahead} new commit${ahead === 1 ? "" : "s"} on GitHub`}
+          className="mr-1 flex h-[24px] items-center gap-1.5 rounded-lg bg-[color-mix(in_srgb,var(--accent)_16%,transparent)] px-2.5 text-[12px] font-medium text-[var(--accent)] transition-colors hover:bg-[color-mix(in_srgb,var(--accent)_26%,transparent)]"
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.9 }}
+          transition={{ duration: 0.15 }}
+          onClick={openUpdateDialog}
+        >
+          <ArrowDownToLine size={13} strokeWidth={2} />
+          Update{version ? ` · ${version}` : ""}
+        </motion.button>
+      )}
+    </AnimatePresence>
   );
 }
 
@@ -253,6 +280,7 @@ export function TitleBar() {
 
       {/* What the sidebar shows, and settings. */}
       <div className="flex h-full items-center gap-0.5 pr-2">
+        <UpdateButton />
         <Fold compact={compactActions} shown={actionsShown} setShown={setActionsShown} icon={Ellipsis} label="Views and settings" testId="title-actions-toggle">
           <ViewSwitcher onPick={() => setActionsShown(false)} />
           <button

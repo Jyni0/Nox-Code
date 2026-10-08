@@ -224,6 +224,14 @@ pub fn startup_path() -> Option<String> {
         .map(|p| p.to_string_lossy().trim_start_matches(r"\\?\").to_string())
 }
 
+/// The git checkout this binary was built from, when it is still on this
+/// machine: "Update" can then pull and rebuild without a GitHub release.
+#[tauri::command]
+pub fn source_checkout() -> Option<String> {
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent()?.to_path_buf();
+    (dir.join(".git").exists() && dir.join("package.json").exists()).then(|| dir.to_string_lossy().to_string())
+}
+
 #[tauri::command]
 pub async fn default_shell() -> AppResult<String> {
     blocking(|| Ok(crate::pty::default_shell())).await

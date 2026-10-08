@@ -10,13 +10,16 @@ import { docHub } from "@/editor/docHub";
 import { forgetBufferStates } from "@/editor/CodeEditor";
 import { viewRegistry } from "@/editor/viewRegistry";
 import { applyTheme } from "@/themes/apply";
-import { extSettings, isExtEnabled } from "@/extensions/registry";
-import { canFormat, formatText } from "@/extensions/prettier";
+import { isExtEnabled } from "@/extensions/registry";
+import { canFormat, formatOnSaveFor, formatText, prettierOptionsFor } from "@/extensions/prettier";
 import { registerSaveHook, useEditor } from "@/stores/editor";
 import { findTheme, useActiveTheme, useSettings } from "@/stores/settings";
 import { useWindowEdges } from "@/components/layout/islands";
 import { useUi } from "@/stores/ui";
 import { useWorkspace } from "@/stores/workspace";
+import { useProject } from "@/stores/project";
+import { startUpdateChecks } from "@/stores/updates";
+import { reindexPaths } from "@/editor/intel";
 import { TitleBar } from "@/components/layout/TitleBar";
 import { StatusBar } from "@/components/layout/StatusBar";
 import { Sidebar } from "@/components/sidebar/Sidebar";
@@ -145,21 +148,14 @@ function useBoot() {
     booted = true;
     registerAppCommands();
     const unHook = registerSaveHook(async (buf, text) => {
-      if (!isExtEnabled("prettier") || !extSettings("prettier").formatOnSave || !canFormat(buf.langId)) return null;
-      const o = extSettings("prettier");
-      const s = useSettings.getState();
-      const { formatted } = await formatText(text, buf.langId, {
-        printWidth: o.printWidth as number,
-        tabWidth: s.tabSize,
-        useTabs: !s.insertSpaces,
-        semi: o.semi as boolean,
-        singleQuote: o.singleQuote as boolean,
-        trailingComma: o.trailingComma as "all",
-      });
+      if (!isExtEnabled("prettier") || !canFormat(buf.langId) || !formatOnSaveFor(buf.path, buf.langId)) return null;
+      const { formatted } = await formatText(text, buf.langId, prettierOptionsFor(buf.path, buf.langId));
       return formatted;
     });
     const unFs = backend().onFsChange((paths) => {
       void useWorkspace.getState().refreshPaths(paths);
+      useProject.getState().onDiskChange(paths);
+      reindexPaths(paths);
       void useEditor.getState().onDiskChange(paths.filter((p) => p !== ".git"));
     });
     // Forget editor state of closed buffers.
@@ -172,6 +168,7 @@ function useBoot() {
       clearTimeout(saveTimer);
       saveTimer = setTimeout(saveSession, 500);
     });
+    const unUpdates = startUpdateChecks();
     const unWs = useWorkspace.subscribe((s, p) => s.root !== p.root && saveSession());
 
     void (async () => {
@@ -196,6 +193,7 @@ function useBoot() {
       unBuf();
       unSession();
       unWs();
+      unUpdates();
     };
   }, []);
   return ready;

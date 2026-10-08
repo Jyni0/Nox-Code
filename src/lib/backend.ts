@@ -53,6 +53,8 @@ export interface Backend extends PtyEvents {
   pickSaveFile(defaultPath?: string): Promise<string | null>;
   pickOpenFile(): Promise<string | null>;
   startupPath(): Promise<string | null>;
+  /** The git checkout the app was built from, if it is on this machine. */
+  sourceCheckout(): Promise<string | null>;
   revealInExplorer(path: string): Promise<void>;
   openUrl(url: string): Promise<void>;
 }

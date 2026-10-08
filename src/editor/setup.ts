@@ -26,6 +26,7 @@ import { search, searchKeymap } from "@codemirror/search";
 import { createFindPanel } from "./findPanel";
 import { lintKeymap } from "@codemirror/lint";
 import type { SettingsState } from "@/stores/settings";
+import { effectiveFor } from "@/stores/project";
 import { noxHighlight } from "./highlight";
 
 class NumberMarker extends GutterMarker {
@@ -102,11 +103,13 @@ export function settingsExtensions(s: EditorSettings): Extension[] {
   return out;
 }
 
-export function pickEditorSettings(s: SettingsState): EditorSettings {
+/** User settings with the project's overrides for this file applied. */
+export function pickEditorSettings(s: SettingsState, file?: { path: string | null; langId: string }): EditorSettings {
+  const e = effectiveFor(file?.path ?? null, file?.langId ?? "plaintext", s);
   return {
-    tabSize: s.tabSize,
-    insertSpaces: s.insertSpaces,
-    wordWrap: s.wordWrap,
+    tabSize: e.tabSize,
+    insertSpaces: e.insertSpaces,
+    wordWrap: e.wordWrap,
     lineNumbers: s.lineNumbers,
     highlightActiveLine: s.highlightActiveLine,
     renderWhitespace: s.renderWhitespace,

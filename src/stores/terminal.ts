@@ -2,10 +2,11 @@ import { create } from "zustand";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { backend } from "@/lib/backend";
-import { basename } from "@/lib/path";
+import { basename, join } from "@/lib/path";
 import { useSettings, findTheme } from "./settings";
 import { terminalTheme } from "@/themes/apply";
 import { useWorkspace } from "./workspace";
+import { useProject } from "./project";
 import { errorMessage, toast, useUi } from "./ui";
 import type { ShellProfile } from "@/lib/types";
 
@@ -122,7 +123,9 @@ export const useTerminal = create<TerminalState>((set, get) => ({
     let profile = shells.find((p) => p.id === pick) ?? null;
     const custom = pick === CUSTOM_PROFILE ? s.terminalShell.trim() : "";
     if (!profile && !custom) profile = shells[0] ?? null;
-    const dir = cwd ?? useWorkspace.getState().root ?? "";
+    const root = useWorkspace.getState().root;
+    const projectCwd = useProject.getState().settings.terminalCwd?.trim();
+    const dir = cwd ?? (root && projectCwd ? join(root, projectCwd) : root) ?? "";
     const id = `term-${++seq}`;
     const term = new Terminal({
       fontFamily: s.fontFamily,

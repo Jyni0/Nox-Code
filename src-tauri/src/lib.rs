@@ -72,6 +72,7 @@ pub fn run() {
             commands::watch_project,
             commands::unwatch_project,
             commands::startup_path,
+            commands::source_checkout,
             commands::default_shell,
             commands::list_shells,
         ])

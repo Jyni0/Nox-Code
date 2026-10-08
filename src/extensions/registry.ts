@@ -4,7 +4,7 @@
  */
 import { Prec, EditorState, type Extension } from "@codemirror/state";
 import { EditorView, highlightTrailingWhitespace, keymap } from "@codemirror/view";
-import { autocompletion, closeBrackets, closeBracketsKeymap, completeAnyWord, completionKeymap } from "@codemirror/autocomplete";
+import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap } from "@codemirror/autocomplete";
 import { codeFolding, foldGutter, foldKeymap } from "@codemirror/language";
 import { highlightSelectionMatches } from "@codemirror/search";
 import { lintGutter, linter } from "@codemirror/lint";
@@ -14,6 +14,8 @@ import { indentationMarkers } from "@replit/codemirror-indentation-markers";
 import { LANGUAGES } from "@/editor/languages";
 import { useSettings, type SettingsState } from "@/stores/settings";
 import { RAINBOW_PALETTES, colorPreview, gitGutter, rainbowBrackets, todoHighlighter } from "./editorFeatures";
+import { universalCompletion } from "@/editor/intel/completion";
+import { ctrlClickNavigation, hoverCards, intelContext } from "@/editor/intel/navigation";
 
 export type ExtCategory = "Editing" | "Visual" | "Formatting" | "Git" | "Productivity" | "Keymaps" | "Previews" | "Languages";
 
@@ -211,21 +213,69 @@ const CORE: NoxExtension[] = [
   {
     id: "autocomplete",
     name: "IntelliSense Lite",
-    description: "Completions from the language and from words already in the file.",
+    description: "Completions in every language: definitions from the file and the whole project, keywords, builtins, snippets and words.",
+    details: [
+      "Functions, classes, types and constants from every file in the project",
+      "Keywords, builtins and snippets for Rust, Go, C/C++, Java, C#, Kotlin, Swift, PHP, Ruby, Lua, Shell, PowerShell and more",
+      "Signature and doc comment next to the selected item",
+      "Quiet inside strings and comments",
+    ],
     category: "Editing",
     icon: "Sparkles",
     color: "#c792ea",
-    version: "6.20.0",
+    version: "7.0.0",
     defaultEnabled: true,
     settings: [
       { key: "onTyping", label: "Suggest while typing", type: "boolean", default: true },
+      { key: "project", label: "Include symbols from other files", type: "boolean", default: true },
+      { key: "snippets", label: "Snippets", type: "boolean", default: true },
       { key: "anyWord", label: "Include words from the file", type: "boolean", default: true },
+      { key: "delay", label: "Delay before suggesting (ms)", type: "number", default: 60, min: 0, max: 1000, step: 20 },
+      { key: "maxOptions", label: "Maximum suggestions", type: "number", default: 80, min: 10, max: 300, step: 10 },
     ],
-    editor: ({ settings }) => [
-      autocompletion({ activateOnTyping: settings.onTyping as boolean, icons: true }),
-      keymap.of(completionKeymap),
-      settings.anyWord ? EditorState.languageData.of(() => [{ autocomplete: completeAnyWord }]) : [],
+    editor: ({ settings, langId, path }) => {
+      // One source per buffer: CodeMirror tracks running queries by function identity.
+      const source = universalCompletion({
+        langId,
+        path,
+        anyWord: settings.anyWord as boolean,
+        project: settings.project as boolean,
+        snippets: settings.snippets as boolean,
+      });
+      return [
+        autocompletion({
+          activateOnTyping: settings.onTyping as boolean,
+          activateOnTypingDelay: settings.delay as number,
+          maxRenderedOptions: settings.maxOptions as number,
+          icons: true,
+        }),
+        Prec.high(keymap.of(completionKeymap)),
+        EditorState.languageData.of(() => [{ autocomplete: source }]),
+      ];
+    },
+  },
+  {
+    id: "code-navigation",
+    name: "Code Navigation",
+    description: "Hover cards with signatures and docs; Ctrl+click or F12 jumps to the definition — in this file, another file or an imported path.",
+    details: [
+      "Ctrl+click (⌘+click on macOS) a name to go to its definition, F12 from the keyboard",
+      "Alt+← goes back to where you were",
+      "Hover a name to see its signature, doc comment and where it is defined",
+      "Shift+F12 finds every use across the project",
+      "Extra cursors moved to Alt+click",
     ],
+    category: "Editing",
+    icon: "Compass",
+    color: "#82aaff",
+    version: "1.0.0",
+    defaultEnabled: true,
+    commands: ["editor.goToDefinition", "editor.goBack", "editor.findReferences"],
+    settings: [
+      { key: "hover", label: "Hover cards", type: "boolean", default: true },
+      { key: "ctrlClick", label: "Ctrl+click to go to definition", type: "boolean", default: true },
+    ],
+    editor: ({ settings }) => [settings.hover ? hoverCards() : [], settings.ctrlClick ? ctrlClickNavigation() : []],
   },
   {
     id: "selection-highlight",
@@ -434,7 +484,7 @@ export function editorExtensionsFor(
   ctx: Omit<ExtContext, "settings">,
   s: Pick<SettingsState, "extEnabled" | "extSettings"> = useSettings.getState(),
 ): Extension[] {
-  const out: Extension[] = [];
+  const out: Extension[] = [intelContext.of({ bufferId: ctx.bufferId, langId: ctx.langId, path: ctx.path })];
   for (const ext of CORE) {
     if (!ext.editor || !isExtEnabled(ext.id, s)) continue;
     try {

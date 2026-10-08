@@ -3,13 +3,14 @@ import { useShallow } from "zustand/react/shallow";
 import { ClipboardCopy, Copy, Eye, FilePlus2, FolderOpen, FolderPlus, GitCompare, PanelRight, Pencil, Search, SquareTerminal, Trash2, ListCollapse, RefreshCw } from "lucide-react";
 import type { DirEntry } from "@/lib/types";
 import { basename, dirname, join, relative, samePath } from "@/lib/path";
-import { matchesAny, splitGlobs } from "@/lib/glob";
+import { matchesAny } from "@/lib/glob";
 import { backend } from "@/lib/backend";
 import { REVEAL_LABEL } from "@/lib/platform";
 import { FileIcon } from "@/icons/FileIcon";
 import { useWorkspace } from "@/stores/workspace";
 import { useEditor, useActiveTab } from "@/stores/editor";
 import { useSettings } from "@/stores/settings";
+import { effectiveExcludes, useProject } from "@/stores/project";
 import { useSearch } from "@/stores/search";
 import { useTerminal } from "@/stores/terminal";
 import { ContextMenu, type MenuItem } from "@/components/ui";
@@ -76,6 +77,7 @@ export function ExplorerTree() {
   const renaming = useWorkspace((s) => s.renaming);
   const deco = useWorkspace((s) => s.gitDecorations);
   const filesExclude = useSettings((s) => s.filesExclude);
+  const projectSettings = useProject((s) => s.settings);
   const guides = useSettings((s) => s.explorerIndentGuides);
   const activeTab = useActiveTab();
   const dirtyPaths = useEditor(
@@ -92,7 +94,7 @@ export function ExplorerTree() {
   const [menu, setMenu] = useState<{ at: { x: number; y: number }; entry: DirEntry | null } | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
 
-  const excludes = useMemo(() => splitGlobs(filesExclude), [filesExclude]);
+  const excludes = useMemo(() => effectiveExcludes(filesExclude, projectSettings), [filesExclude, projectSettings]);
 
   const rows = useMemo(() => {
     const out: Row[] = [];

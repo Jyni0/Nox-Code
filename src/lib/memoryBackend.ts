@@ -414,6 +414,10 @@ export function createMemoryBackend(opts: MemoryOptions = {}): Backend & { fs: M
     async sourceCheckout() {
       return null;
     },
+    async runCheck() {
+      // No processes in the browser demo.
+      return { code: 127, stdout: "", stderr: "not available in the browser", timedOut: false };
+    },
     async revealInExplorer() {},
     async openUrl(url) {
       window.open(url, "_blank", "noreferrer");

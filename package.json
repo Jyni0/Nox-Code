@@ -1,7 +1,7 @@
 {
   "name": "nox-code",
   "private": true,
-  "version": "1.1.1",
+  "version": "1.7.6",
   "description": "Nox Code — a faster-than-light code editor",
   "repository": "https://github.com/Jyni0/Nox-Code",
   "type": "module",

@@ -181,7 +181,7 @@ function clean(data: unknown): ProjectSettings {
 }
 
 /** JSON with comments and trailing commas, as people write config files. */
-function parseJsonc(text: string): unknown {
+export function parseJsonc(text: string): unknown {
   const stripped = text
     .replace(/("(?:\\.|[^"\\])*")|\/\/[^\n]*|\/\*[\s\S]*?\*\//g, (_, s: string | undefined) => s ?? "")
     .replace(/,(\s*[}\]])/g, "$1");

@@ -3,6 +3,13 @@ import DOMPurify from "dompurify";
 import { ICON_LIBRARY } from "./library";
 import { resolveIcon, type IconSpec } from "./iconThemes";
 import { useSettings } from "@/stores/settings";
+import { setVsThemeRefs, useVsIcons } from "./vscodeThemes";
+
+// VS Code icon themes kept in settings.
+setVsThemeRefs(useSettings.getState().vscodeIconThemes);
+useSettings.subscribe((s, p) => {
+  if (s.vscodeIconThemes !== p.vscodeIconThemes) setVsThemeRefs(s.vscodeIconThemes);
+});
 
 export function IconView({ spec, size = 16 }: { spec: IconSpec; size?: number }) {
   switch (spec.type) {
@@ -59,6 +66,12 @@ export function IconView({ spec, size = 16 }: { spec: IconSpec; size?: number })
           {spec.char}
         </span>
       );
+    case "img":
+      return spec.src ? (
+        <img src={spec.src} alt="" aria-hidden draggable={false} className="shrink-0" style={{ width: size, height: size }} />
+      ) : (
+        <span aria-hidden className="inline-block shrink-0" style={{ width: size, height: size }} />
+      );
     case "svg":
       return <SvgIcon markup={spec.markup} color={spec.color} size={size} />;
     case "dot":
@@ -100,6 +113,9 @@ export const FileIcon = memo(function FileIcon({
 }) {
   const themeId = useSettings((s) => s.iconTheme);
   const rules = useSettings((s) => s.iconRules);
-  const spec = useMemo(() => resolveIcon(name, isDir, open, themeId, rules), [name, isDir, open, themeId, rules]);
+  // Re-resolves when a VS Code theme's icons finish loading.
+  const loaded = useVsIcons((s) => s.version);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const spec = useMemo(() => resolveIcon(name, isDir, open, themeId, rules), [name, isDir, open, themeId, rules, loaded]);
   return <IconView spec={spec} size={size} />;
 });

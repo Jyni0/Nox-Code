@@ -1,3 +1,4 @@
+pub mod checks;
 pub mod commands;
 pub mod error;
 pub mod fsops;
@@ -75,6 +76,7 @@ pub fn run() {
             commands::source_checkout,
             commands::default_shell,
             commands::list_shells,
+            commands::run_check,
         ])
         .on_window_event(|window, event| {
             // No tray, no background mode: closing the window ends the app and

@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
-import type { Backend } from "./backend";
+import type { Backend, CheckOutput } from "./backend";
 
 /** Subscribes to a Tauri event and returns a synchronous unsubscribe. */
 function on<T>(event: string, cb: (payload: T) => void): () => void {
@@ -68,6 +68,7 @@ export function createTauriBackend(): Backend {
     pickSaveFile: async (defaultPath) => (await save({ defaultPath, title: "Save As" })) ?? null,
     startupPath: () => invoke("startup_path"),
     sourceCheckout: () => invoke<string | null>("source_checkout").catch(() => null),
+    runCheck: (cwd, command, timeoutSecs) => invoke<CheckOutput>("run_check", { cwd, command, timeoutSecs }),
     revealInExplorer: (path) => revealItemInDir(path),
     openUrl: (url) => openUrl(url),
   };

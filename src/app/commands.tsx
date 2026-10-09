@@ -11,6 +11,7 @@ import { appWindow } from "@/lib/window";
 import { FILE_MANAGER } from "@/lib/platform";
 import { activeView } from "@/editor/viewRegistry";
 import { goBack, goToDefinition, wordAtPos } from "@/editor/intel/navigation";
+import { runChecks, useProblems } from "@/editor/intel/problems";
 import { LANGUAGES, PLAIN_TEXT, languageName } from "@/editor/languages";
 import { invalidateGitBases } from "@/editor/CodeEditor";
 import { activeTabInfo, useEditor } from "@/stores/editor";
@@ -656,6 +657,10 @@ export function registerAppCommands() {
     },
     { id: "git.init", title: "Git: Initialize Repository", category: "Git", when: () => !!ws().root && !ws().git?.isRepo, run: async () => (await backend().gitInit(ws().root!), await ws().refreshGit()) },
 
+    /* ---- Problems ---- */
+    { id: "problems.show", title: "Show Problems", category: "View", keybinding: "Ctrl+Shift+M", run: () => showProblems() },
+    { id: "problems.run", title: "Run Project Checks", category: "View", when: () => !!ws().root, run: () => void runChecks(undefined, true) },
+
     /* ---- Help ---- */
     { id: "help.about", title: "About Nox Code", category: "Help", run: () => ui().openSettings("about") },
     { id: "settings.project", title: "Project Settings", category: "Preferences", when: () => !!ws().root, run: () => ui().openSettings("project") },
@@ -663,4 +668,30 @@ export function registerAppCommands() {
     { id: "help.welcome", title: "Welcome", category: "Help", run: () => useEditor.setState((s) => ({ panes: s.panes.map((p) => (p.id === s.activePaneId ? { ...p, activeTabId: null } : p)) })) },
   ];
   registerCommands(cmds);
+}
+
+/** Every problem in the project, errors first; picking one opens it. */
+function showProblems() {
+  const { problems, running } = useProblems.getState();
+  const rank = { error: 0, warning: 1, info: 2 } as const;
+  const list = [...problems].sort((a, b) => rank[a.severity] - rank[b.severity] || a.path.localeCompare(b.path) || a.line - b.line);
+  const root = useWorkspace.getState().root;
+  if (!list.length) {
+    toast(running.length ? "Checking the project…" : "No problems found", running.length ? "info" : "success");
+    if (!running.length) void runChecks();
+    return;
+  }
+  ui().pick({
+    placeholder: `${list.length} problem${list.length === 1 ? "" : "s"} — type to filter`,
+    items: list.slice(0, 1000).map((p, i) => ({
+      id: String(i),
+      label: (p.severity === "error" ? "⛔ " : p.severity === "warning" ? "⚠ " : "ℹ ") + p.message.split("\n")[0],
+      description: `${(root && relative(root, p.path)) || basename(p.path)}:${p.line}${p.col ? ":" + p.col : ""}`,
+      hint: p.source,
+    })),
+    onAccept: (it) => {
+      const p = list[Number(it.id)];
+      void useEditor.getState().openFile(p.path, { reveal: { line: p.line, col: Math.max(0, p.col - 1) } });
+    },
+  });
 }

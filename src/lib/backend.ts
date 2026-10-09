@@ -55,6 +55,8 @@ export interface Backend extends PtyEvents {
   startupPath(): Promise<string | null>;
   /** The git checkout the app was built from, if it is on this machine. */
   sourceCheckout(): Promise<string | null>;
+  /** Runs a checker command line (through the platform shell) and captures its output. */
+  runCheck(cwd: string, command: string, timeoutSecs?: number): Promise<CheckOutput>;
   revealInExplorer(path: string): Promise<void>;
   openUrl(url: string): Promise<void>;
 }
@@ -62,6 +64,13 @@ export interface Backend extends PtyEvents {
 export const inTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
 let instance: Backend | null = null;
+
+export interface CheckOutput {
+  code: number | null;
+  stdout: string;
+  stderr: string;
+  timedOut: boolean;
+}
 
 export async function initBackend(): Promise<Backend> {
   if (instance) return instance;

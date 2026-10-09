@@ -3,19 +3,22 @@
  * (Settings → Extensions, or the Extensions view in the sidebar).
  */
 import { Prec, EditorState, type Extension } from "@codemirror/state";
-import { EditorView, highlightTrailingWhitespace, keymap } from "@codemirror/view";
+import { EditorView, ViewPlugin, highlightTrailingWhitespace, keymap } from "@codemirror/view";
 import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap } from "@codemirror/autocomplete";
 import { codeFolding, foldGutter, foldKeymap, syntaxTree } from "@codemirror/language";
 import { highlightSelectionMatches } from "@codemirror/search";
-import { lintGutter, linter } from "@codemirror/lint";
+import { lintGutter, linter, setDiagnostics } from "@codemirror/lint";
 import { vim } from "@replit/codemirror-vim";
 import { showMinimap } from "@replit/codemirror-minimap";
 import { indentationMarkers } from "@replit/codemirror-indentation-markers";
 import { LANGUAGES } from "@/editor/languages";
 import { useSettings, type SettingsState } from "@/stores/settings";
 import { RAINBOW_PALETTES, colorPreview, gitGutter, rainbowBrackets, todoHighlighter } from "./editorFeatures";
+import { errorLens } from "./errorLens";
+import { DEFAULT_TAGS, betterComments } from "./betterComments";
 import { universalCompletion } from "@/editor/intel/completion";
-import { syntaxDiagnostics } from "@/editor/intel/syntaxErrors";
+import { problemDiagnostics, syntaxDiagnostics } from "@/editor/intel/syntaxErrors";
+import { ensureChecksStarted, onProblemsChange, setProblemsEnabled } from "@/editor/intel/problems";
 import { ctrlClickNavigation, hoverCards, intelContext } from "@/editor/intel/navigation";
 
 export type ExtCategory = "Editing" | "Visual" | "Formatting" | "Git" | "Productivity" | "Keymaps" | "Previews" | "Languages";
@@ -176,6 +179,59 @@ const CORE: NoxExtension[] = [
     version: "1.0.0",
     defaultEnabled: true,
     editor: () => colorPreview(),
+  },
+  {
+    id: "error-lens",
+    name: "Error Lens",
+    description: "Shows each error and warning right in the code: the message at the end of its line and the line tinted, without hovering.",
+    details: ["Works with syntax errors and the project checker (tsc, cargo check, go vet, ruff)", "One message per line — the most severe; (+N) when the line has more"],
+    category: "Visual",
+    icon: "Eye",
+    color: "#ff5370",
+    version: "1.0.0",
+    defaultEnabled: true,
+    settings: [
+      {
+        key: "minSeverity",
+        label: "Show messages for",
+        type: "select",
+        default: "warning",
+        options: [
+          { value: "error", label: "Errors only" },
+          { value: "warning", label: "Errors and warnings" },
+          { value: "info", label: "Everything" },
+        ],
+      },
+      { key: "lineBackground", label: "Tint the whole line", type: "boolean", default: true },
+      { key: "maxLength", label: "Longest message (characters)", type: "number", default: 120, min: 20, max: 400, step: 10 },
+    ],
+    editor: ({ settings }) =>
+      errorLens({
+        minSeverity: (settings.minSeverity as "error" | "warning" | "info") ?? "warning",
+        lineBackground: settings.lineBackground !== false,
+        maxLength: Number(settings.maxLength) || 120,
+      }),
+  },
+  {
+    id: "better-comments",
+    name: "Better Comments",
+    description: "Colours comments by the tag they start with: ! alerts, ? questions, TODO tasks, * highlights and //// commented-out code.",
+    details: ["// ! Deprecated — do not use", "// ? Should this be cached?", "// TODO: split this function", "// * Important: runs before render", "//// oldCode()", "Works with line and block comments in every language, JSDoc lines included"],
+    category: "Visual",
+    icon: "Palette",
+    color: "#98c379",
+    version: "1.0.0",
+    defaultEnabled: true,
+    settings: [
+      {
+        key: "tags",
+        label: "Tags",
+        description: "tag colour [strike], comma separated",
+        type: "text",
+        default: DEFAULT_TAGS,
+      },
+    ],
+    editor: ({ settings }) => betterComments(String(settings.tags ?? DEFAULT_TAGS)),
   },
   {
     id: "todo-highlight",
@@ -355,27 +411,41 @@ const CORE: NoxExtension[] = [
   },
   {
     id: "syntax-errors",
-    name: "Syntax Errors",
-    description: "Underlines syntax errors as you type, in every language — unexpected tokens, missing brackets, unclosed blocks.",
+    name: "Errors & Problems",
+    description: "Underlines syntax errors as you type, and real code errors from the project's own checker — tsc, cargo check, go vet, ruff — after every save.",
     details: [
-      "TypeScript, JavaScript, Python, Rust, Go, C/C++, Java, PHP, HTML, CSS, XML, YAML: errors from the language's parser",
-      "Lua, Ruby, C#, Kotlin, Swift, PowerShell and other languages: unbalanced brackets outside strings and comments",
-      "Hover the underline or the gutter mark to read the error; F8 jumps to the next one",
+      "Syntax: TypeScript, JavaScript, Python, Rust, Go, C/C++, Java, PHP, HTML, CSS, XML, YAML from the language's parser; other languages get a bracket check",
+      "Code errors (types, unknown names, unused imports…) from the project's tools: TypeScript (tsconfig + node_modules), Rust (Cargo.toml), Go (go.mod), C# (.sln / .csproj via dotnet build), Python (ruff or pyflakes)",
+      "The error count in the status bar lists every problem in the project; F8 jumps to the next one in the file",
     ],
     category: "Editing",
     icon: "ShieldAlert",
     color: "#f07178",
-    version: "1.0.0",
+    version: "1.1.0",
     defaultEnabled: true,
-    settings: [{ key: "delay", label: "Check after typing pause (ms)", type: "number", default: 600, min: 100, max: 5000, step: 100 }],
-    editor: ({ langId, path, settings }) => [
-      lintGutter(),
-      linter((view) => syntaxDiagnostics(view.state, langId, path), {
-        delay: Number(settings.delay) || 600,
-        // Re-check once the lazily loaded parser has produced a tree.
-        needsRefresh: (u) => syntaxTree(u.startState) !== syntaxTree(u.state),
-      }),
+    commands: ["problems.show", "problems.run"],
+    settings: [
+      { key: "projectChecks", label: "Run the project's checker after saving", type: "boolean", default: true },
+      { key: "delay", label: "Syntax check after typing pause (ms)", type: "number", default: 300, min: 100, max: 5000, step: 100 },
     ],
+    editor: ({ langId, path, settings }) => {
+      if (settings.projectChecks) ensureChecksStarted();
+      const diagnostics = (state: EditorState) => [...syntaxDiagnostics(state, langId, path), ...(settings.projectChecks ? problemDiagnostics(state, path) : [])];
+      return [
+        lintGutter(),
+        linter((view) => diagnostics(view.state), {
+          delay: Number(settings.delay) || 300,
+          // Re-check once the lazily loaded parser has produced a tree.
+          needsRefresh: (u) => syntaxTree(u.startState) !== syntaxTree(u.state),
+        }),
+        // New results from the checker show up at once — not after another
+        // lint delay, and without waiting for an edit.
+        ViewPlugin.define((view) => {
+          const off = onProblemsChange(() => view.dispatch(setDiagnostics(view.state, diagnostics(view.state))));
+          return { destroy: off };
+        }),
+      ];
+    },
   },
   {
     id: "spellcheck",
@@ -520,3 +590,6 @@ export function editorExtensionsFor(
   }
   return out;
 }
+
+// Project checks follow the extension's switch and its "projectChecks" setting.
+setProblemsEnabled(() => isExtEnabled("syntax-errors") && extSettings("syntax-errors").projectChecks !== false);

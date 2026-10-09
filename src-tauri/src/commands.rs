@@ -236,3 +236,10 @@ pub fn source_checkout() -> Option<String> {
 pub async fn default_shell() -> AppResult<String> {
     blocking(|| Ok(crate::pty::default_shell())).await
 }
+
+/// Runs a checker command line in `cwd` and returns its output (see `checks`).
+#[tauri::command]
+pub async fn run_check(cwd: String, command: String, timeout_secs: Option<u64>) -> AppResult<crate::checks::CheckOutput> {
+    let timeout = std::time::Duration::from_secs(timeout_secs.unwrap_or(120));
+    blocking(move || crate::checks::run(&PathBuf::from(cwd), &command, timeout)).await
+}

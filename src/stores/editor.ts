@@ -499,6 +499,8 @@ export const useEditor = create<EditorStore>((set, get) => {
         return false;
       }
       docHub.markSaved(bufferId);
+      // Re-run the project's checker for this language (tsc, cargo check…).
+      void import("@/editor/intel/problems").then((m) => m.onSaved(buf.langId, buf.path));
       const renamed = path !== buf.path;
       const name = basename(path);
       set((st) => ({

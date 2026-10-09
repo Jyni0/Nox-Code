@@ -7,6 +7,7 @@
 import type { EditorState } from "@codemirror/state";
 import { ensureSyntaxTree, syntaxTree } from "@codemirror/language";
 import type { Diagnostic } from "@codemirror/lint";
+import { problemsFor } from "./problems";
 
 /** Languages whose CodeMirror mode only highlights (no error recovery to read). */
 const HIGHLIGHT_ONLY = new Set(["powershell", "toml", "dockerfile", "lua", "ruby", "swift", "kotlin", "csharp", "dart", "scala", "haskell", "r", "perl", "nginx", "cmake"]);
@@ -116,6 +117,30 @@ function bracketErrors(state: EditorState): Diagnostic[] {
   }
   for (const s of stack.slice(0, MAX - out.length)) out.push({ from: s.pos, to: s.pos + 1, severity: "error", source: "syntax", message: `'${s.ch}' is never closed — expected '${OPEN[s.ch]}'` });
   return out.sort((a, b) => a.from - b.from);
+}
+
+/** Problems from the project's checker, placed in the current text. */
+export function problemDiagnostics(state: EditorState, path: string | null): Diagnostic[] {
+  const doc = state.doc;
+  const out: Diagnostic[] = [];
+  for (const p of problemsFor(path)) {
+    if (p.line < 1 || p.line > doc.lines) continue;
+    const line = doc.line(p.line);
+    let from: number;
+    let to: number;
+    if (p.col > 0) {
+      from = Math.min(line.from + p.col - 1, line.to);
+      // Underline the word (or the one character) the tool points at.
+      const word = /^[\w$]+/.exec(state.sliceDoc(from, line.to));
+      to = Math.min(line.to, from + (word ? word[0].length : 1));
+    } else {
+      const lead = /^\s*/.exec(line.text)![0].length;
+      from = line.from + lead;
+      to = line.to;
+    }
+    out.push({ from, to, severity: p.severity, source: p.source, message: p.message });
+  }
+  return out;
 }
 
 export function syntaxDiagnostics(state: EditorState, langId: string, path: string | null): Diagnostic[] {

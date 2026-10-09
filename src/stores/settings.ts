@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import type { Theme } from "@/themes/types";
 import { BUILTIN_THEMES, DEFAULT_THEME_ID } from "@/themes/builtin";
 import { DEFAULT_ICON_THEME, type IconRule } from "@/icons/iconThemes";
+import type { VsIconThemeRef } from "@/icons/vscodeThemes";
 
 export type LineNumbers = "on" | "relative" | "off";
 export type CursorStyle = "line" | "block" | "underline";
@@ -19,6 +20,8 @@ export interface SettingsState {
   darkThemeId: string;
   iconTheme: string;
   iconRules: IconRule[];
+  /** VS Code icon themes read from extensions on this machine (never copied into the app). */
+  vscodeIconThemes: VsIconThemeRef[];
   iconWeight: IconWeight;
   uiScale: number;
   uiFont: string;
@@ -88,6 +91,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   darkThemeId: DEFAULT_THEME_ID,
   iconTheme: DEFAULT_ICON_THEME,
   iconRules: [],
+  vscodeIconThemes: [],
   iconWeight: "regular",
   uiScale: 1,
   uiFont: "Inter",

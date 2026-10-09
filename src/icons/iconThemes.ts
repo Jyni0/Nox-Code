@@ -1,4 +1,5 @@
 import { DEFAULT_FOLDER_COLOR, FOLDERS, extOf, fileKind } from "./fileTypes";
+import { vsIconTheme } from "./vscodeThemes";
 
 /** How one file or folder is drawn. */
 export type IconSpec =
@@ -8,6 +9,8 @@ export type IconSpec =
   | { type: "tile"; color: string; text?: string; icon?: string }
   | { type: "emoji"; char: string }
   | { type: "svg"; markup: string; color?: string }
+  /** An image file (VS Code icon themes); "" while it loads. */
+  | { type: "img"; src: string }
   | { type: "dot"; color: string }
   | { type: "none" };
 
@@ -123,6 +126,7 @@ export const ICON_THEMES: IconTheme[] = [
 export const DEFAULT_ICON_THEME = "flow";
 
 export function findIconTheme(id: string): IconTheme {
+  if (id.startsWith("vsc:")) return vsIconTheme(id) ?? ICON_THEMES[0];
   return ICON_THEMES.find((t) => t.id === id) ?? ICON_THEMES[0];
 }
 

@@ -1,4 +1,5 @@
-import { AlertTriangle, ArrowDown, ArrowUp, Bell, Check, GitBranch, Palette, Paintbrush, Terminal } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, Bell, Check, CircleX, GitBranch, LoaderCircle, Palette, Paintbrush, Terminal } from "lucide-react";
+import { useProblems } from "@/editor/intel/problems";
 import { runCommand } from "@/core/commands";
 import { languageName } from "@/editor/languages";
 import { useActiveBuffer, useActiveTab } from "@/stores/editor";
@@ -21,6 +22,27 @@ function Item({ children, onClick, title, className, testId }: { children: React
     >
       {children}
     </button>
+  );
+}
+
+/** Error / warning counts from the project's checkers; opens the list. */
+function ProblemsItem() {
+  const problems = useProblems((s) => s.problems);
+  const running = useProblems((s) => s.running.length > 0);
+  const checkers = useProblems((s) => s.checkers);
+  const unavailable = useProblems((s) => s.unavailable);
+  if (!isExtEnabled("syntax-errors") || (!checkers.length && !problems.length)) return null;
+  const errors = problems.filter((p) => p.severity === "error").length;
+  const warnings = problems.filter((p) => p.severity === "warning").length;
+  const missing = Object.entries(unavailable).map(([k, v]) => `${k}: ${v}`);
+  const title = [`Problems (Ctrl+Shift+M) — checked by ${checkers.join(", ")}`, ...missing].join("\n");
+  return (
+    <Item onClick={() => void runCommand("problems.show")} title={title} testId="status-problems">
+      {running ? <LoaderCircle size={12} className="animate-spin" /> : <CircleX size={12} className={errors ? "text-[var(--diff-del)]" : undefined} />}
+      <span>{errors}</span>
+      <AlertTriangle size={12} className={warnings ? "text-[var(--diff-mod)]" : undefined} />
+      <span>{warnings}</span>
+    </Item>
   );
 }
 
@@ -64,6 +86,7 @@ export function StatusBar() {
           <AlertTriangle size={12} /> Changed on disk
         </Item>
       )}
+      <ProblemsItem />
       <div className="flex-1" />
       {isText && cursor.vimMode && isExtEnabled("vim") && (
         <span className="mr-1 rounded-md bg-[var(--accent)] px-1.5 font-mono text-[10.5px] font-semibold text-[var(--accent-fg)]">{cursor.vimMode}</span>

@@ -65,8 +65,12 @@ function useAppearance() {
   useEffect(() => {
     const st = document.documentElement.style;
     st.setProperty("--editor-font", s.fontFamily);
-    st.setProperty("--editor-font-size", `${s.fontSize}px`);
-    st.setProperty("--editor-line-height", snappedLineHeight(s.fontSize, s.lineHeight, s.uiScale));
+    // The editor cancels the UI zoom (CodeMirror mis-measures inside CSS zoom) and
+    // scales its own text instead, so it looks the same size as the rest.
+    const scale = s.uiScale || 1;
+    st.setProperty("--ui-scale", String(scale));
+    st.setProperty("--editor-font-size", `${s.fontSize * scale}px`);
+    st.setProperty("--editor-line-height", snappedLineHeight(s.fontSize * scale, s.lineHeight, 1));
     st.setProperty("--editor-ligatures", s.ligatures ? "contextual" : "none");
     st.setProperty("--editor-features", s.ligatures ? '"calt" 1, "liga" 1' : '"calt" 0, "liga" 0');
     st.setProperty("--font-ui", `${s.uiFont}, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`);

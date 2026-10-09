@@ -132,7 +132,8 @@ export const useUi = create<UiState>((set, get) => ({
   closeQuickPick: () => set({ quickPick: null }),
   toast: (message, kind = "info", detail) => {
     const id = ++toastId;
-    set((s) => ({ toasts: [...s.toasts.slice(-3), { id, kind, message, detail }] }));
+    // The same message again replaces the one showing instead of stacking.
+    set((s) => ({ toasts: [...s.toasts.filter((t) => t.message !== message || t.detail !== detail).slice(-3), { id, kind, message, detail }] }));
     setTimeout(() => get().dismissToast(id), kind === "error" ? 7000 : 3500);
   },
   dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),

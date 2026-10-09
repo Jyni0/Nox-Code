@@ -108,6 +108,12 @@ textarea::-webkit-scrollbar { display: none; }
 
 /* ============ CodeMirror ============ */
 .cm-editor { height: 100%; background: var(--bg-editor); color: var(--ed-fg, var(--text-main)); }
+/* CodeMirror measures in unzoomed pixels: inside the app's CSS zoom its selection,
+   cursor and tooltips land in the wrong place and it keeps re-measuring. The editor
+   undoes the zoom (its font size is pre-scaled); tooltips and panels zoom their
+   content back so they still match the UI. */
+.cm-editor { zoom: calc(1 / var(--ui-scale, 1)); }
+.cm-tooltip > *, .cm-panels > * { zoom: var(--ui-scale, 1); }
 .cm-editor.cm-focused { outline: none; }
 .cm-scroller {
   font-family: var(--editor-font, var(--font-mono));
@@ -120,14 +126,16 @@ textarea::-webkit-scrollbar { display: none; }
 .cm-scroller::-webkit-scrollbar-thumb { background: rgba(128, 128, 128, 0.25); border-radius: 999px; border: 2px solid transparent; background-clip: content-box; }
 .cm-scroller::-webkit-scrollbar-thumb:hover { background-color: rgba(128, 128, 128, 0.45); }
 .cm-scroller::-webkit-scrollbar-track, .cm-scroller::-webkit-scrollbar-corner { background: transparent; }
-.cm-content { caret-color: var(--ed-cursor, var(--accent)); padding: 6px 0 !important; }
-/* Code starts right at the gutter. The indent-guide plugin hard-codes a 2px line
+.cm-content { caret-color: var(--ed-cursor, var(--accent)); padding: 6px 0 6px 1px !important; }
+/* Code starts right at the gutter, with no line padding: a padded strip would show
+   up inside full-line selections. The indent-guide plugin hard-codes a 2px line
    padding, so both read the same variable and the guides stay on their columns. */
-.cm-editor { --line-pad: 2px; }
+.cm-editor { --line-pad: 0px; }
 .cm-line { padding-left: var(--line-pad) !important; }
-.cm-indent-markers::before { left: var(--line-pad) !important; }
+/* The plugin draws each guide half a character into its column; pull it back so it sits on the column's left edge, under the first letter of the line that opens the block. */
+.cm-indent-markers::before { left: calc(var(--line-pad) - 0.5ch) !important; }
 .cm-gutters { background: var(--bg-editor) !important; border: none !important; color: var(--ed-gutter, var(--text-dim)) !important; }
-.cm-lineNumbers .cm-gutterElement { padding: 0 10px 0 14px !important; min-width: 44px; font-size: 0.92em; }
+.cm-lineNumbers .cm-gutterElement { padding: 0 calc(10px * var(--ui-scale, 1)) 0 calc(14px * var(--ui-scale, 1)) !important; min-width: calc(44px * var(--ui-scale, 1)); font-size: 0.92em; }
 .cm-activeLineGutter { background: transparent !important; color: var(--ed-gutter-active, var(--text-main)) !important; }
 .cm-activeLine { background: var(--ed-line-highlight, color-mix(in srgb, var(--text-main) 4%, transparent)) !important; }
 .cm-cursor, .cm-dropCursor { border-left: 2px solid var(--ed-cursor, var(--accent)) !important; }
@@ -293,3 +301,20 @@ textarea::-webkit-scrollbar { display: none; }
   100% { transform: translateX(220%) skewX(-20deg); opacity: 0; }
 }
 .welcome-streak { animation: nox-streak 3.6s ease-in-out infinite; }
+
+/* ============ Error Lens ============ */
+.nox-lens-msg {
+  margin-left: 3ch; padding: 0 8px; border-radius: 4px; font-style: italic; white-space: pre;
+  font-size: 0.92em; pointer-events: none; user-select: none;
+}
+.nox-lens-error { color: var(--diff-del); background: color-mix(in srgb, var(--diff-del) 10%, transparent); }
+.nox-lens-warning { color: var(--diff-mod); background: color-mix(in srgb, var(--diff-mod) 10%, transparent); }
+.nox-lens-info, .nox-lens-hint { color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.nox-lens-line-error { background-color: color-mix(in srgb, var(--diff-del) 7%, transparent) !important; }
+.nox-lens-line-warning { background-color: color-mix(in srgb, var(--diff-mod) 6%, transparent) !important; }
+.nox-lens-line-info, .nox-lens-line-hint { background-color: color-mix(in srgb, var(--accent) 5%, transparent) !important; }
+
+/* ============ Better Comments ============ */
+/* !important and the descendant rule: the comment's own highlight span may sit inside or outside this mark. */
+.nox-bc, .nox-bc * { color: var(--bc) !important; }
+.nox-bc-strike, .nox-bc-strike * { text-decoration: line-through; }

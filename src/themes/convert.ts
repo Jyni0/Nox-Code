@@ -53,7 +53,7 @@ interface VsTheme {
 }
 
 const SCOPES: Record<SyntaxToken, string[]> = {
-  keyword: ["keyword.control", "keyword", "storage.modifier", "storage"],
+  keyword: ["keyword", "storage.modifier", "storage", "keyword.control"],
   string: ["string.quoted", "string"],
   comment: ["comment.line", "comment.block", "comment"],
   function: ["entity.name.function", "support.function", "meta.function-call"],
@@ -81,22 +81,23 @@ function scopesOf(r: VsTokenColor): string[] {
 
 /** Color of the most specific rule for a preferred scope list. */
 function lookup(rules: VsTokenColor[], prefs: string[]): { color?: string; italic?: boolean; bold?: boolean } {
-  for (const pref of prefs) {
-    let exact: VsTokenColor | undefined;
-    let child: VsTokenColor | undefined;
-    for (const r of rules) {
-      if (!r.settings?.foreground) continue;
-      for (const s of scopesOf(r)) {
-        // Selectors with descendants ("meta.tag string") are too specific.
-        if (s.includes(" ")) continue;
-        if (s === pref) exact = r;
-        else if (!child && s.startsWith(pref + ".")) child = r;
+  // An exact scope anywhere in the list beats a more specific child scope
+  // ("variable" over "variable.other.enummember" when asking for variables).
+  for (const children of [false, true]) {
+    for (const pref of prefs) {
+      let hit: VsTokenColor | undefined;
+      for (const r of rules) {
+        if (!r.settings?.foreground) continue;
+        for (const s of scopesOf(r)) {
+          // Selectors with descendants ("meta.tag string") are too specific.
+          if (s.includes(" ")) continue;
+          if (children ? !hit && s.startsWith(pref + ".") : s === pref) hit = r;
+        }
       }
-    }
-    const hit = exact ?? child;
-    if (hit?.settings?.foreground && isColor(hit.settings.foreground)) {
-      const fs = hit.settings.fontStyle ?? "";
-      return { color: hit.settings.foreground, italic: fs.includes("italic"), bold: fs.includes("bold") };
+      if (hit?.settings?.foreground && isColor(hit.settings.foreground)) {
+        const fs = hit.settings.fontStyle ?? "";
+        return { color: hit.settings.foreground, italic: fs.includes("italic"), bold: fs.includes("bold") };
+      }
     }
   }
   return {};
@@ -179,6 +180,10 @@ export function fromVsCode(json: unknown, fileName = "Imported theme"): Theme {
     }
   }
 
+  // VS Code themes often color control flow (if, return, import) apart from declarations.
+  const control = lookup(rules, ["keyword.control"]).color;
+  const controlKeyword = control && control.toLowerCase() !== syntax.keyword.toLowerCase() ? control : undefined;
+
   const name = vs.name?.trim() || fileName.replace(/\.(json|jsonc)$/i, "");
   return {
     id: "custom-" + slugify(name) + "-" + uid(),
@@ -188,6 +193,7 @@ export function fromVsCode(json: unknown, fileName = "Imported theme"): Theme {
     ui,
     editor,
     syntax,
+    ...(controlKeyword ? { controlKeyword } : {}),
     italicComments,
     italicKeywords,
     boldKeywords,

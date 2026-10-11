@@ -8,6 +8,7 @@ import { syntaxDiagnostics } from "@/editor/intel/syntaxErrors";
 import { languageById } from "@/editor/languages";
 import { parseGeneric, parseMsbuild, parseTsc } from "@/editor/intel/problems";
 import { DEFAULT_TAGS, matchTag, parseTags, taggedRanges } from "@/extensions/betterComments";
+import { buildActivity, fill } from "@/integrations/discord";
 import { ensureSyntaxTree } from "@codemirror/language";
 
 const names = (text: string, lang: string) => extractSymbols(text, lang).map((s) => `${s.kind}:${s.name}`);
@@ -181,5 +182,30 @@ describe("better comments", () => {
     for (const id of ["html", "xml", "markdown"]) expect(await colored(id, "<!-- ! alert -->\n"), id).toEqual(["!:! alert"]);
     expect(await colored("css", "a { color: red; } /* * note */\n")).toEqual(["*:* note"]);
     expect(await colored("json", '{ "url": "http://x" // TODO later\n}\n')).toEqual(["TODO:TODO later"]);
+  });
+});
+
+describe("discord status", () => {
+  const input = { file: "App.tsx", langId: "tsx", workspace: "nox-code", branch: "main", line: 12, col: 4, lines: 340, errors: 2, warnings: 1, idle: false };
+  const opts = { details: "Editing {file}", state: "{workspace} · {branch} · {problems}", showNames: true, elapsed: "session" as const, largeImage: "logo" };
+  it("fills the templates and drops empty parts", () => {
+    expect(fill("{workspace} · {branch} · {problems}", { workspace: "p", branch: "", problems: "no problems" })).toBe("p · no problems");
+    expect(fill("{branch} · {workspace}", { branch: "", workspace: "" })).toBe("");
+    expect(fill("Ln {line}, {lines}", { line: "3", lines: "9 lines" })).toBe("Ln 3, 9 lines");
+  });
+  it("builds what Discord shows", () => {
+    expect(buildActivity(input, opts, { session: 1000, file: 2000 })).toEqual({
+      type: 0,
+      details: "Editing App.tsx",
+      state: "nox-code · main · 2 errors, 1 warning",
+      timestamps: { start: 1000 },
+      assets: { large_image: "logo", large_text: "Editing TypeScript React" },
+    });
+    // Private: no names; idle; no file open.
+    const priv = buildActivity({ ...input, errors: 0, warnings: 0 }, { ...opts, showNames: false, elapsed: "file" }, { session: 1, file: 2 });
+    expect([priv.details, priv.state, priv.timestamps]).toEqual(["Editing a TypeScript React file", "a project · no problems", { start: 2 }]);
+    expect(buildActivity({ ...input, idle: true }, opts, { session: 1, file: 2 }).details).toBe("Idle");
+    const none = buildActivity({ ...input, file: null, langId: null }, { ...opts, elapsed: "none", largeImage: "" }, { session: 1, file: 2 });
+    expect([none.details, none.timestamps, none.assets]).toEqual(["Browsing files", undefined, undefined]);
   });
 });

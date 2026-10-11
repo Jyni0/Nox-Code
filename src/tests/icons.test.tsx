@@ -4,7 +4,7 @@ import { ICON_THEMES, resolveIcon, type IconRule } from "@/icons/iconThemes";
 import { fileKind } from "@/icons/fileTypes";
 import { ICON_LIBRARY } from "@/icons/library";
 import { IconView } from "@/icons/FileIcon";
-import { parseTheme, pickIcon, resolvePath } from "@/icons/vscodeThemes";
+import { parseTheme, pickIcon, resolvePath } from "@/icons/flowIcons";
 
 describe("file kinds", () => {
   it("knows special file names before extensions", () => {
@@ -71,7 +71,7 @@ describe("IconView", () => {
   });
 });
 
-describe("VS Code icon themes", () => {
+describe("Flow Icons theme files", () => {
   const theme = parseTheme(
     {
       iconDefinitions: { file: { iconPath: "./dark/file.svg" }, ts: { iconPath: "./dark/ts.svg" }, test: { iconPath: "./dark/test.svg" }, pkg: { iconPath: "../shared/pkg.svg" }, folder: { iconPath: "./dark/folder.svg" }, folderOpen: { iconPath: "./dark/folder-open.svg" }, src: { iconPath: "./dark/src.svg" }, py: { iconPath: "./dark/py.svg" }, tsLight: { iconPath: "./light/ts.svg" } },

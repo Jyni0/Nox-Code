@@ -291,7 +291,7 @@ describe("Icon settings", () => {
         <Toasts />
       </>,
     );
-    await user.click(screen.getAllByTestId("icon-theme-card")[2]);
+    await user.click(screen.getAllByTestId("icon-theme-card").find((c) => c.textContent?.startsWith("Badges"))!);
     expect(useSettings.getState().iconTheme).toBe("badges");
     await user.type(screen.getByLabelText("Pattern"), "proto");
     await user.click(screen.getByRole("radio", { name: "Emoji" }));

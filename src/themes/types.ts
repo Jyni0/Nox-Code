@@ -74,6 +74,8 @@ export interface Theme {
   /** Unset tokens fall back to values derived from the UI palette. */
   editor: Partial<Record<EditorToken, string>>;
   syntax: Record<SyntaxToken, string>;
+  /** Control-flow keywords (if, return, import), when they differ from the other keywords. */
+  controlKeyword?: string;
   /** Comment / keyword styling. */
   italicComments?: boolean;
   italicKeywords?: boolean;

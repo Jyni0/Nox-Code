@@ -31,8 +31,8 @@ const VSCODE_THEME = `{
 }`;
 
 describe("built-in themes", () => {
-  it("ship 20 complete palettes with unique ids", () => {
-    expect(BUILTIN_THEMES.length).toBe(20);
+  it("ship 21 complete palettes with unique ids", () => {
+    expect(BUILTIN_THEMES.length).toBe(21);
     expect(new Set(BUILTIN_THEMES.map((t) => t.id)).size).toBe(BUILTIN_THEMES.length);
     for (const t of BUILTIN_THEMES) {
       for (const k of UI_TOKENS) expect(isColor(t.ui[k]), `${t.id} ui.${k}`).toBe(true);

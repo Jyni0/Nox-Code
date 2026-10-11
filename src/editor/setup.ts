@@ -20,7 +20,7 @@ import {
   rectangularSelection,
   scrollPastEnd,
 } from "@codemirror/view";
-import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
+import { defaultKeymap, history, historyKeymap, indentWithTab, redo } from "@codemirror/commands";
 import { bracketMatching, indentOnInput, indentUnit } from "@codemirror/language";
 import { search, searchKeymap } from "@codemirror/search";
 import { createFindPanel } from "./findPanel";
@@ -81,7 +81,9 @@ export function baseExtensions(): Extension[] {
     rectangularSelection(),
     crosshairCursor(),
     search({ top: true, createPanel: createFindPanel }),
-    keymap.of([...defaultKeymap, ...searchKeymap, ...historyKeymap, ...lintKeymap, indentWithTab]),
+    // Redo like VS Code: Ctrl+Y and Ctrl+Shift+Z on Windows / Linux, ⌘⇧Z on macOS
+    // (CodeMirror only binds Ctrl+Shift+Z on Linux).
+    keymap.of([{ key: "Mod-Shift-z", run: redo, preventDefault: true }, ...defaultKeymap, ...searchKeymap, ...historyKeymap, ...lintKeymap, indentWithTab]),
   ];
 }
 

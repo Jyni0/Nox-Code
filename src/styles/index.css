@@ -268,7 +268,10 @@ textarea::-webkit-scrollbar { display: none; }
 .cm-merge-gap { background: var(--bg-sidebar); border-left: 1px solid var(--border-soft); border-right: 1px solid var(--border-soft); }
 
 /* ============ xterm ============ */
-.xterm { padding: 6px 0 0 10px; height: 100%; }
+/* Out of the app's CSS zoom, like the editor: xterm maps the mouse to cells in
+   unzoomed pixels (font size is pre-scaled in stores/terminal.ts). */
+.nox-term-host { zoom: calc(1 / var(--ui-scale, 1)); }
+.xterm { padding: calc(6px * var(--ui-scale, 1)) 0 0 calc(10px * var(--ui-scale, 1)); height: 100%; }
 .xterm .xterm-viewport { scrollbar-width: thin; scrollbar-color: rgba(128, 128, 128, 0.3) transparent; background: transparent !important; }
 .xterm .xterm-viewport::-webkit-scrollbar { width: 6px; }
 .xterm .xterm-viewport::-webkit-scrollbar-thumb { background: rgba(128, 128, 128, 0.3); border-radius: 9999px; }

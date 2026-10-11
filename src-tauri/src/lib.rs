@@ -1,5 +1,6 @@
 pub mod checks;
 pub mod commands;
+pub mod discord;
 pub mod error;
 pub mod fsops;
 pub mod git;
@@ -39,6 +40,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(commands::AppState::default())
+        .manage(std::sync::Arc::new(discord::Presence::default()))
         .setup(|app| {
             if let Some(window) = app.get_webview_window("main") {
                 disable_browser_shortcuts(&window);
@@ -77,6 +79,8 @@ pub fn run() {
             commands::default_shell,
             commands::list_shells,
             commands::run_check,
+            commands::discord_set_activity,
+            commands::discord_close,
         ])
         .on_window_event(|window, event| {
             // No tray, no background mode: closing the window ends the app and
@@ -85,6 +89,7 @@ pub fn run() {
                 let state = window.app_handle().state::<commands::AppState>();
                 state.pty.kill_all();
                 state.watcher.stop();
+                let _ = window.app_handle().state::<std::sync::Arc<discord::Presence>>().close();
             }
         })
         .run(tauri::generate_context!())

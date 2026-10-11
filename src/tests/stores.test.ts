@@ -283,6 +283,34 @@ describe("terminal shells", () => {
     for (const t of useTerminal.getState().terms) await useTerminal.getState().kill(t.id);
     expect(useTerminal.getState().terms).toHaveLength(0);
   });
+
+  it("splits, moves panes between tabs and unsplits", async () => {
+    const { useTerminal, termGroups } = await import("@/stores/terminal");
+    const t = () => useTerminal.getState();
+    const shape = () => termGroups(t().terms).map((g) => g.terms.map((x) => x.id));
+    const a = (await t().create())!;
+    const b = (await t().split(a))!;
+    expect(shape()).toEqual([[a, b]]);
+    expect(t().activeId).toBe(b);
+    // A second tab dragged onto the left half of `a`.
+    const c = (await t().create())!;
+    expect(shape()).toEqual([[a, b], [c]]);
+    t().placeGroup(t().terms.find((x) => x.id === c)!.group, a, "before");
+    expect(shape()).toEqual([[c, a, b]]);
+    // A pane dragged back onto the tab strip.
+    t().detach(a, 0);
+    expect(shape()).toEqual([[a], [c, b]]);
+    t().place(a, b, "after");
+    expect(shape()).toEqual([[c, b, a]]);
+    t().resize(c, 1.5, b, 0.5);
+    expect(t().terms.map((x) => x.weight)).toEqual([1.5, 0.5, 1]);
+    // Killing the active pane focuses its neighbour in the split.
+    t().activate(b);
+    await t().kill(b);
+    expect(shape()).toEqual([[c, a]]);
+    expect(t().activeId).toBe(a);
+    for (const x of t().terms) await t().kill(x.id);
+  });
 });
 
 describe("splitting down", () => {

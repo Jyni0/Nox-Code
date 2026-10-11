@@ -2277,7 +2277,7 @@ dependencies = [
 
 [[package]]
 name = "noxcode"
-version = "1.7.6"
+version = "1.9.2"
 dependencies = [
  "base64 0.22.1",
  "ignore",

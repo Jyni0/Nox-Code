@@ -3,7 +3,7 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import type { Theme } from "@/themes/types";
 import { BUILTIN_THEMES, DEFAULT_THEME_ID } from "@/themes/builtin";
 import { DEFAULT_ICON_THEME, type IconRule } from "@/icons/iconThemes";
-import type { VsIconThemeRef } from "@/icons/vscodeThemes";
+import type { FlowVariant } from "@/icons/flowIcons";
 
 export type LineNumbers = "on" | "relative" | "off";
 export type CursorStyle = "line" | "block" | "underline";
@@ -20,8 +20,8 @@ export interface SettingsState {
   darkThemeId: string;
   iconTheme: string;
   iconRules: IconRule[];
-  /** VS Code icon themes read from extensions on this machine (never copied into the app). */
-  vscodeIconThemes: VsIconThemeRef[];
+  /** Style of the Flow Icons theme. */
+  flowIconsVariant: FlowVariant;
   iconWeight: IconWeight;
   uiScale: number;
   uiFont: string;
@@ -91,7 +91,7 @@ export const DEFAULT_SETTINGS: SettingsState = {
   darkThemeId: DEFAULT_THEME_ID,
   iconTheme: DEFAULT_ICON_THEME,
   iconRules: [],
-  vscodeIconThemes: [],
+  flowIconsVariant: "dim",
   iconWeight: "regular",
   uiScale: 1,
   uiFont: "Inter",
@@ -194,11 +194,20 @@ export const useSettings = create<SettingsState & Actions>()(
     }),
     {
       name: "nox.settings",
-      version: 2,
+      version: 3,
       // v2: Nox Flow replaced Nox Glyphs as the default icon theme.
+      // v3: the VS Code icon theme import became the built-in Flow Icons theme.
       migrate: (persisted, version) => {
-        const p = persisted as Partial<SettingsState>;
+        const p = persisted as Partial<SettingsState> & { vscodeIconThemes?: unknown };
         if (version < 2 && p.iconTheme === "glyphs") p.iconTheme = "flow";
+        if (version < 3) {
+          const flow = /^vsc:thang-nm\.flow-icons\/flow-(dim|deep|dawn|you)$/.exec(p.iconTheme ?? "");
+          if (flow) {
+            p.iconTheme = "flow-icons";
+            p.flowIconsVariant = flow[1] as FlowVariant;
+          } else if (p.iconTheme?.startsWith("vsc:")) p.iconTheme = DEFAULT_ICON_THEME;
+          delete p.vscodeIconThemes;
+        }
         return p as SettingsState;
       },
       storage: createJSONStorage(() => localStorage),

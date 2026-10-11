@@ -16,6 +16,7 @@ export function applyTheme(theme: Theme, root: HTMLElement = document.documentEl
     else s.removeProperty(`--${t}`);
   }
   for (const t of SYNTAX_TOKENS) s.setProperty(`--syn-${t}`, theme.syntax[t]);
+  s.setProperty("--syn-control", theme.controlKeyword ?? theme.syntax.keyword);
   s.setProperty("--syn-comment-style", theme.italicComments ? "italic" : "normal");
   s.setProperty("--syn-keyword-style", theme.italicKeywords ? "italic" : "normal");
   s.setProperty("--syn-keyword-weight", theme.boldKeywords ? "600" : "normal");

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { Check, FolderOpen, Pencil, Plus, RefreshCw, Search, Trash2, Upload } from "lucide-react";
-import { DEFAULT_ICON_THEME, ICON_THEMES, findIconTheme, resolveIcon, type IconRule, type IconSpec } from "@/icons/iconThemes";
-import { discoverInstalled, readExtension, unloadVsTheme, useVsIcons, type VsIconThemeRef } from "@/icons/vscodeThemes";
+import { Check, FolderOpen, Pencil, Plus, Search, Trash2, Upload } from "lucide-react";
+import { DEFAULT_ICON_THEME, ICON_THEMES, resolveIcon, type IconRule, type IconSpec } from "@/icons/iconThemes";
+import { FLOW_VARIANTS, findInEditors, installFlowIcons, uninstallFlowIcons, useFlowIcons, type FlowVariant } from "@/icons/flowIcons";
 import { backend } from "@/lib/backend";
 import { IconView } from "@/icons/FileIcon";
 import { ICON_LIBRARY, ICON_NAMES } from "@/icons/library";
@@ -97,88 +97,86 @@ function GlyphPicker({ value, color, onPick }: { value: string; color: string; o
   );
 }
 
-function addVsThemes(list: VsIconThemeRef[], use?: string) {
-  const s = useSettings.getState();
-  const kept = s.vscodeIconThemes.filter((r) => !list.some((x) => x.id === r.id));
-  for (const r of list) unloadVsTheme(r.id);
-  s.patch({ vscodeIconThemes: [...kept, ...list], ...(use ? { iconTheme: use } : {}) });
-}
-
-function removeVsTheme(id: string) {
-  const s = useSettings.getState();
-  unloadVsTheme(id);
-  s.patch({ vscodeIconThemes: s.vscodeIconThemes.filter((r) => r.id !== id), ...(s.iconTheme === id ? { iconTheme: DEFAULT_ICON_THEME } : {}) });
-}
-
-/** Icon themes from VS Code (and friends) on this machine, or from a folder. */
-function VsCodeThemes() {
-  const added = useSettings((s) => s.vscodeIconThemes);
-  const [found, setFound] = useState<VsIconThemeRef[] | null>(null);
+/** Flow Icons: install the licensed copy on this computer, pick its style. */
+function FlowIconsCard() {
+  const status = useFlowIcons((s) => s.status);
+  const variant = useSettings((s) => s.flowIconsVariant);
+  const [inEditor, setInEditor] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const desktop = backend().kind === "tauri";
 
-  const scan = async () => {
+  useEffect(() => {
+    if (!desktop || status !== "missing") return;
+    void findInEditors().then(setInEditor);
+  }, [desktop, status]);
+
+  const install = async (from: string | null) => {
+    const dir = from ?? (await backend().pickFolder());
+    if (!dir) return;
     setBusy(true);
     try {
-      setFound(await discoverInstalled());
+      await installFlowIcons(dir);
+      useSettings.getState().set("iconTheme", "flow-icons");
+      toast("Flow Icons installed", "success", "It no longer needs VS Code.");
+    } catch (e) {
+      toast("Could not install Flow Icons", "error", String(e).replace(/^Error:\s*/, ""));
     } finally {
       setBusy(false);
     }
   };
-  useEffect(() => {
-    if (desktop) void scan();
-  }, [desktop]);
 
-  const fromFolder = async () => {
-    const dir = await backend().pickFolder();
-    if (!dir) return;
-    const list = await readExtension(dir, "Folder");
-    if (!list.length) return toast("No icon theme in this folder", "error", "Pick a VS Code extension folder — one whose package.json lists contributes.iconThemes.");
-    addVsThemes(list, list[0].id);
-    toast(`Added ${list.map((r) => r.label).join(", ")}`, "success");
-  };
-
-  const notAdded = (found ?? []).filter((r) => !added.some((a) => a.id === r.id && a.dir === r.dir));
   return (
     <SettingsCard>
-      <div className="flex items-start gap-3">
-        <div className="flex flex-1 flex-col gap-0.5">
-          <span className="text-[13px] font-medium text-[var(--text-main)]">VS Code icon themes</span>
-          <span className="text-[12px] text-[var(--text-dim)]">
-            Use an icon theme you have installed in VS Code, Cursor, VSCodium or Windsurf — Flow Icons, Material Icon Theme… Icons are read from the extension on this machine, never copied into Nox.
-          </span>
-        </div>
-        <Button size="sm" variant="ghost" onClick={() => void scan()} disabled={!desktop || busy} title="Look for installed icon themes again">
-          <RefreshCw size={13} className={cx(busy && "animate-spin")} />
-        </Button>
-        <Button size="sm" onClick={() => void fromFolder()} disabled={!desktop}>
-          <FolderOpen size={13} /> Load from folder…
-        </Button>
-      </div>
-      {!desktop ? (
-        <div className="text-[12px] text-[var(--text-dim)]">Available in the desktop app.</div>
-      ) : found === null ? (
-        <div className="text-[12px] text-[var(--text-dim)]">Looking for installed icon themes…</div>
-      ) : notAdded.length === 0 ? (
-        <div className="text-[12px] text-[var(--text-dim)]">{found.length ? "Every installed icon theme is added above." : "No icon themes found in VS Code, Cursor, VSCodium or Windsurf."}</div>
+      {status === "ready" ? (
+        <SettingRow title="Flow Icons style" hint="Installed on this computer.">
+          <div className="flex items-center gap-2">
+            <Segmented
+              size="sm"
+              options={FLOW_VARIANTS.map((v) => ({ value: v.id, label: v.label }))}
+              value={variant}
+              onChange={(v) => {
+                const s = useSettings.getState();
+                s.patch({ flowIconsVariant: v as FlowVariant, iconTheme: "flow-icons" });
+              }}
+            />
+            <Button
+              size="sm"
+              variant="ghost"
+              title="Remove Flow Icons from this computer"
+              disabled={busy}
+              onClick={() => {
+                void uninstallFlowIcons();
+                if (useSettings.getState().iconTheme === "flow-icons") useSettings.getState().set("iconTheme", DEFAULT_ICON_THEME);
+              }}
+            >
+              <Trash2 size={13} />
+            </Button>
+          </div>
+        </SettingRow>
       ) : (
-        <div className="flex flex-col">
-          {notAdded.map((r) => (
-            <div key={r.id} className="flex items-center gap-3 border-t border-[var(--border-soft)] py-2 first:border-t-0">
-              <div className="flex min-w-0 flex-1 flex-col">
-                <span className="truncate text-[13px] text-[var(--text-main)]">{r.label}</span>
-                <span className="truncate text-[11px] text-[var(--text-dim)]">
-                  {r.source} · {r.extension} {r.version}
-                </span>
-              </div>
-              <Button size="sm" variant="ghost" onClick={() => addVsThemes([r])}>
-                <Plus size={13} /> Add
-              </Button>
-              <Button size="sm" onClick={() => addVsThemes([r], r.id)}>
-                Use
+        <div className="flex items-start gap-3">
+          <div className="flex flex-1 flex-col gap-0.5">
+            <span className="text-[13px] font-medium text-[var(--text-main)]">Flow Icons</span>
+            <span className="text-[12px] text-[var(--text-dim)]">
+              {!desktop
+                ? "Available in the desktop app."
+                : status === "missing"
+                  ? "Flow Icons is a paid icon set, so it isn't bundled with Nox. Install your licensed copy on this computer once: from VS Code if it's there, or from the extension's folder (thang-nm.flow-icons-…) copied from any computer. VS Code isn't needed afterwards."
+                  : "Checking…"}
+            </span>
+          </div>
+          {desktop && status === "missing" && (
+            <div className="flex shrink-0 gap-2">
+              {inEditor && (
+                <Button size="sm" disabled={busy} onClick={() => void install(inEditor)}>
+                  {busy ? "Installing…" : "Install from VS Code"}
+                </Button>
+              )}
+              <Button size="sm" variant={inEditor ? "ghost" : undefined} disabled={busy} onClick={() => void install(null)}>
+                <FolderOpen size={13} /> {busy && !inEditor ? "Installing…" : "Install from folder…"}
               </Button>
             </div>
-          ))}
+          )}
         </div>
       )}
     </SettingsCard>
@@ -187,8 +185,7 @@ function VsCodeThemes() {
 
 export function IconsSettings() {
   const iconTheme = useSettings((s) => s.iconTheme);
-  const vsThemes = useSettings((s) => s.vscodeIconThemes);
-  useVsIcons((s) => s.version);
+  useFlowIcons((s) => s.version);
   const rules = useSettings((s) => s.iconRules);
   const iconWeight = useSettings((s) => s.iconWeight);
   const [draft, setDraft] = useState(emptyDraft);
@@ -230,7 +227,7 @@ export function IconsSettings() {
     <div className="flex flex-col gap-4">
       <SectionHeading>File icon theme</SectionHeading>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-        {[...ICON_THEMES, ...vsThemes.map((r) => findIconTheme(r.id))].map((t) => (
+        {ICON_THEMES.map((t) => (
           <button
             key={t.id}
             data-testid="icon-theme-card"
@@ -243,21 +240,6 @@ export function IconsSettings() {
             <div className="flex items-center gap-2">
               <span className="flex-1 truncate text-[13px] font-medium text-[var(--text-main)]">{t.name}</span>
               {iconTheme === t.id && <Check size={14} className="text-[var(--accent)]" />}
-              {t.id.startsWith("vsc:") && (
-                <span
-                  role="button"
-                  tabIndex={0}
-                  title="Remove this theme"
-                  aria-label={`Remove ${t.name}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    removeVsTheme(t.id);
-                  }}
-                  className="rounded p-0.5 text-[var(--text-dim)] hover:bg-[var(--hover-bg)] hover:text-[var(--text-main)]"
-                >
-                  <Trash2 size={12} />
-                </span>
-              )}
             </div>
             <div className="grid grid-cols-2 gap-x-3 gap-y-1">
               {SAMPLE.slice(0, 8).map(([name, dir, open]) => (
@@ -272,7 +254,7 @@ export function IconsSettings() {
         ))}
       </div>
 
-      <VsCodeThemes />
+      <FlowIconsCard />
 
       <SettingsCard>
         <SettingRow title="Interface icon weight" hint="Stroke width of every icon in the app (product icons).">

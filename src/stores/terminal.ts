@@ -19,6 +19,33 @@ export interface TermInfo {
   exited: boolean;
   /** Profile it was started with (empty for a custom command line). */
   profileId: string;
+  /** Terminals sharing a group show side by side under one tab (a split). */
+  group: string;
+  /** Share of the group's width. */
+  weight: number;
+}
+
+export type DropSide = "before" | "after";
+
+/** Groups in tab order, each with its terminals left to right. */
+export function termGroups(terms: TermInfo[]): Array<{ id: string; terms: TermInfo[] }> {
+  const out: Array<{ id: string; terms: TermInfo[] }> = [];
+  for (const t of terms) {
+    const g = out.find((x) => x.id === t.group);
+    if (g) g.terms.push(t);
+    else out.push({ id: t.group, terms: [t] });
+  }
+  return out;
+}
+
+/** Moves `moving` (in their order) next to `target`, into its group. */
+function placeNext(terms: TermInfo[], moving: string[], target: string, side: DropSide): TermInfo[] {
+  const group = terms.find((t) => t.id === target)?.group;
+  if (!group || moving.includes(target)) return terms;
+  const moved = moving.map((id) => terms.find((t) => t.id === id)!).filter(Boolean).map((t) => ({ ...t, group, weight: 1 }));
+  const rest = terms.filter((t) => !moving.includes(t.id)).map((t) => (t.group === group ? { ...t, weight: 1 } : t));
+  const i = rest.findIndex((t) => t.id === target) + (side === "after" ? 1 : 0);
+  return [...rest.slice(0, i), ...moved, ...rest.slice(i)];
 }
 
 /**
@@ -42,6 +69,13 @@ const enqueue = (ptyId: number, job: () => Promise<unknown>) => {
   return next;
 };
 let wired = false;
+
+/**
+ * xterm measures in unzoomed pixels: inside the app's CSS zoom it maps the
+ * mouse to the wrong cells (selection lands off to the side). The terminal
+ * host cancels the zoom (index.css), so the font is scaled here instead.
+ */
+const termFontSize = (s: { terminalFontSize: number; uiScale: number }) => Math.round(s.terminalFontSize * (s.uiScale || 1) * 100) / 100;
 let seq = 0;
 
 function wire() {
@@ -63,19 +97,25 @@ function wire() {
   });
   // Repaint every terminal when the theme or font changes.
   useSettings.subscribe((s, prev) => {
-    if (s.themeId === prev.themeId && s.customThemes === prev.customThemes && s.terminalFontSize === prev.terminalFontSize && s.terminalCursor === prev.terminalCursor && s.fontFamily === prev.fontFamily) return;
+    if (s.themeId === prev.themeId && s.customThemes === prev.customThemes && s.terminalFontSize === prev.terminalFontSize && s.uiScale === prev.uiScale && s.terminalCursor === prev.terminalCursor && s.fontFamily === prev.fontFamily) return;
     const theme = terminalTheme(findTheme(s.themeId, s));
     for (const l of live.values()) {
       l.term.options.theme = theme;
-      l.term.options.fontSize = s.terminalFontSize;
+      l.term.options.fontSize = termFontSize(s);
       l.term.options.cursorStyle = s.terminalCursor;
       l.term.options.fontFamily = s.fontFamily;
-      try {
-        l.fit.fit();
-      } catch {
-        /* hidden */
-      }
     }
+    // Re-fit once the new UI scale is on the page (it's applied after this render),
+    // or the column count is measured against the old zoom.
+    setTimeout(() => {
+      for (const l of live.values()) {
+        try {
+          l.fit.fit();
+        } catch {
+          /* hidden */
+        }
+      }
+    }, 50);
   });
 }
 
@@ -86,7 +126,17 @@ interface TerminalState {
   shells: ShellProfile[];
   loadShells(): Promise<ShellProfile[]>;
   /** Opens a terminal with a profile id, or the default from settings. */
-  create(cwd?: string, profileId?: string): Promise<string | null>;
+  create(cwd?: string, profileId?: string, opts?: { group?: string; after?: string }): Promise<string | null>;
+  /** A new terminal next to `id` (the active one), same shell and folder. */
+  split(id?: string): Promise<string | null>;
+  /** Moves a terminal next to another one, splitting that group. */
+  place(id: string, target: string, side: DropSide): void;
+  /** Moves a whole tab (group) next to a terminal, splitting it. */
+  placeGroup(group: string, target: string, side: DropSide): void;
+  /** Takes a terminal out of its split into a tab of its own (at tab `index`). */
+  detach(id: string, index?: number): void;
+  /** Resizes two neighbours of a split. */
+  resize(a: string, wa: number, b: string, wb: number): void;
   kill(id: string): Promise<void>;
   activate(id: string): void;
   rename(id: string, title: string): void;
@@ -115,7 +165,7 @@ export const useTerminal = create<TerminalState>((set, get) => ({
     return shellsLoading;
   },
 
-  async create(cwd, profileId) {
+  async create(cwd, profileId, opts) {
     wire();
     const s = useSettings.getState();
     // An explicit pick wins, then the default profile, then the custom command line.
@@ -130,7 +180,7 @@ export const useTerminal = create<TerminalState>((set, get) => ({
     const id = `term-${++seq}`;
     const term = new Terminal({
       fontFamily: s.fontFamily,
-      fontSize: s.terminalFontSize,
+      fontSize: termFontSize(s),
       cursorStyle: s.terminalCursor,
       cursorBlink: true,
       allowProposedApi: true,
@@ -148,8 +198,13 @@ export const useTerminal = create<TerminalState>((set, get) => ({
     live.set(id, { term, fit, host });
 
     const title = profile?.name ?? (custom ? basename(custom.split(" ")[0]).replace(/\.exe$/i, "") : "shell");
-    const info: TermInfo = { id, ptyId: null, title, cwd: dir, exited: false, profileId: profile?.id ?? "" };
-    set((st) => ({ terms: [...st.terms, info], activeId: id }));
+    const info: TermInfo = { id, ptyId: null, title, cwd: dir, exited: false, profileId: profile?.id ?? "", group: opts?.group ?? id, weight: 1 };
+    set((st) => {
+      const at = opts?.after ? st.terms.findIndex((t) => t.id === opts.after) + 1 : 0;
+      // A split: the group's panes share the width equally again.
+      const terms = opts?.group ? st.terms.map((t) => (t.group === opts.group ? { ...t, weight: 1 } : t)) : st.terms;
+      return { terms: at > 0 ? [...terms.slice(0, at), info, ...terms.slice(at)] : [...terms, info], activeId: id };
+    });
     useUi.getState().togglePanel(true);
 
     try {
@@ -198,10 +253,43 @@ export const useTerminal = create<TerminalState>((set, get) => ({
     live.delete(id);
     set((s) => {
       const terms = s.terms.filter((x) => x.id !== id);
-      return { terms, activeId: s.activeId === id ? terms[terms.length - 1]?.id ?? null : s.activeId };
+      if (s.activeId !== id) return { terms };
+      // Prefer a neighbour in the same split, then the last tab.
+      const sibling = terms.filter((x) => x.group === t?.group);
+      const i = s.terms.findIndex((x) => x.id === id);
+      const next = sibling.find((x) => s.terms.indexOf(x) > i) ?? sibling.at(-1) ?? terms.at(-1);
+      return { terms, activeId: next?.id ?? null };
     });
     if (!get().terms.length) useUi.getState().togglePanel(false);
   },
+
+  async split(id) {
+    const from = get().terms.find((t) => t.id === (id ?? get().activeId));
+    if (!from) return get().create();
+    return get().create(from.cwd || undefined, from.profileId || undefined, { group: from.group, after: from.id });
+  },
+
+  place: (id, target, side) => set((s) => ({ terms: placeNext(s.terms, [id], target, side), activeId: id })),
+
+  placeGroup: (group, target, side) =>
+    set((s) => {
+      const moving = s.terms.filter((t) => t.group === group).map((t) => t.id);
+      return { terms: placeNext(s.terms, moving, target, side), activeId: moving.includes(s.activeId ?? "") ? s.activeId : moving[0] ?? s.activeId };
+    }),
+
+  detach: (id, index) =>
+    set((s) => {
+      const t = s.terms.find((x) => x.id === id);
+      if (!t) return {};
+      const rest = s.terms.filter((x) => x.id !== id).map((x) => (x.group === t.group ? { ...x, weight: 1 } : x));
+      const mine = { ...t, group: `${id}-${++seq}`, weight: 1 };
+      // Tab `index`: before the first terminal of the group now at that position.
+      const groups = termGroups(rest);
+      const before = index !== undefined && index < groups.length ? rest.indexOf(groups[index].terms[0]) : rest.length;
+      return { terms: [...rest.slice(0, before), mine, ...rest.slice(before)], activeId: id };
+    }),
+
+  resize: (a, wa, b, wb) => set((s) => ({ terms: s.terms.map((t) => (t.id === a ? { ...t, weight: wa } : t.id === b ? { ...t, weight: wb } : t)) })),
 
   activate: (id) => set({ activeId: id }),
   rename: (id, title) => set((s) => ({ terms: s.terms.map((t) => (t.id === id ? { ...t, title } : t)) })),

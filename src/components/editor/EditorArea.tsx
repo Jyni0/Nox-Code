@@ -275,7 +275,16 @@ function PaneView({ pane, index, total, at }: { pane: Pane; index: number; total
       }}
     >
       {pane.tabs.length > 0 && (
-        <div className="flex h-10 shrink-0 items-center gap-1 pl-1.5 pr-1.5">
+        <div
+          className="flex h-10 shrink-0 items-center gap-1 pl-1.5 pr-1.5"
+          // Double-click on free space in the tab strip: a new file in this group.
+          onDoubleClick={(e) => {
+            if ((e.target as HTMLElement).closest('[role="tab"], button, [role="menu"]')) return;
+            e.preventDefault();
+            useEditor.getState().focusPane(pane.id);
+            useEditor.getState().newUntitled();
+          }}
+        >
           <OverlayScroll wheelX wrapperClassName="min-w-0 flex-1" className="flex items-center gap-1 overflow-x-auto py-1" role="tablist">
             {pane.tabs.map((t) => (
               <TabItem key={t.id} pane={pane} tab={t} active={t.id === pane.activeTabId} focused={focused} />

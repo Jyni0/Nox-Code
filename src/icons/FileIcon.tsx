@@ -3,13 +3,11 @@ import DOMPurify from "dompurify";
 import { ICON_LIBRARY } from "./library";
 import { resolveIcon, type IconSpec } from "./iconThemes";
 import { useSettings } from "@/stores/settings";
-import { setVsThemeRefs, useVsIcons } from "./vscodeThemes";
+import { setFlowVariant, useFlowIcons } from "./flowIcons";
 
-// VS Code icon themes kept in settings.
-setVsThemeRefs(useSettings.getState().vscodeIconThemes);
-useSettings.subscribe((s, p) => {
-  if (s.vscodeIconThemes !== p.vscodeIconThemes) setVsThemeRefs(s.vscodeIconThemes);
-});
+// The Flow Icons style picked in settings.
+setFlowVariant(useSettings.getState().flowIconsVariant);
+useSettings.subscribe((s) => setFlowVariant(s.flowIconsVariant));
 
 export function IconView({ spec, size = 16 }: { spec: IconSpec; size?: number }) {
   switch (spec.type) {
@@ -113,8 +111,8 @@ export const FileIcon = memo(function FileIcon({
 }) {
   const themeId = useSettings((s) => s.iconTheme);
   const rules = useSettings((s) => s.iconRules);
-  // Re-resolves when a VS Code theme's icons finish loading.
-  const loaded = useVsIcons((s) => s.version);
+  // Re-resolves when Flow Icons finish loading.
+  const loaded = useFlowIcons((s) => s.version);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const spec = useMemo(() => resolveIcon(name, isDir, open, themeId, rules), [name, isDir, open, themeId, rules, loaded]);
   return <IconView spec={spec} size={size} />;

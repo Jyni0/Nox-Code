@@ -359,6 +359,33 @@ export const BUILTIN_THEMES: Theme[] = [
       attribute: "#f9e2af", regexp: "#f5c2e7", heading: "#f38ba8", link: "#89dceb", meta: "#fab387",
     },
   ),
+  theme(
+    "vscode-dark-modern",
+    "Dark Modern",
+    "dark",
+    {
+      "bg-app": "#181818", "bg-sidebar": "#181818", "bg-titlebar": "#181818", "bg-surface": "#202020", "bg-input": "#313131",
+      "bg-elevated": "#3c3c3c", "bg-editor": "#1f1f1f", border: "#2b2b2b", "border-soft": "rgba(255,255,255,0.05)", "text-main": "#cccccc",
+      "text-muted": "#9d9d9d", "text-dim": "#6e7681", accent: "#0078d4", "accent-hover": "#026ec1", "diff-add": "#2ea043", "diff-del": "#f85149",
+      "diff-mod": "#bb800a", "hover-bg": "rgba(255,255,255,0.05)", "row-solid": "#181818", "row-solid-hover": "#2a2d2e",
+    },
+    {
+      keyword: "#569cd6", string: "#ce9178", comment: "#6a9955", function: "#dcdcaa", variable: "#9cdcfe", property: "#9cdcfe",
+      type: "#4ec9b0", number: "#b5cea8", constant: "#4fc1ff", operator: "#d4d4d4", punctuation: "#cccccc", tag: "#569cd6",
+      attribute: "#9cdcfe", regexp: "#d16969", heading: "#569cd6", link: "#4daafc", meta: "#dcdcaa", invalid: "#f44747",
+    },
+    {
+      description: "Visual Studio Code's default dark theme.",
+      author: "Microsoft (MIT)",
+      controlKeyword: "#c586c0",
+      italicComments: false,
+      editor: {
+        "ed-fg": "#cccccc", "ed-gutter": "#6e7681", "ed-gutter-active": "#cccccc", "ed-cursor": "#aeafad", "ed-selection": "#264f78",
+        "ed-line-highlight": "rgba(255,255,255,0.04)", "ed-match": "#add6ff26", "ed-search": "#9e6a03", "ed-bracket": "rgba(0,100,0,0.1)",
+        "ed-indent": "#404040", "ed-indent-active": "#707070",
+      },
+    },
+  ),
 ];
 
 export const DEFAULT_THEME_ID = "nox-dark";

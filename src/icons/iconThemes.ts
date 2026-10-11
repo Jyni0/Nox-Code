@@ -1,5 +1,5 @@
 import { DEFAULT_FOLDER_COLOR, FOLDERS, extOf, fileKind } from "./fileTypes";
-import { vsIconTheme } from "./vscodeThemes";
+import { flowIcon } from "./flowIcons";
 
 /** How one file or folder is drawn. */
 export type IconSpec =
@@ -67,6 +67,14 @@ export const ICON_THEMES: IconTheme[] = [
     },
   },
   {
+    id: "flow-icons",
+    name: "Flow Icons",
+    description: "thang-nm's Flow Icons — install your licensed copy once (below), then pick a style.",
+    // Until it's installed, the Nox Flow look stands in.
+    file: (name) => flowIcon(name, false, false) ?? ICON_THEMES[0].file(name),
+    folder: (name, open) => flowIcon(name, true, open) ?? ICON_THEMES[0].folder(name, open),
+  },
+  {
     id: "glyphs",
     name: "Nox Glyphs",
     description: "Colored glyphs per language, special folders get their own icons.",
@@ -126,7 +134,6 @@ export const ICON_THEMES: IconTheme[] = [
 export const DEFAULT_ICON_THEME = "flow";
 
 export function findIconTheme(id: string): IconTheme {
-  if (id.startsWith("vsc:")) return vsIconTheme(id) ?? ICON_THEMES[0];
   return ICON_THEMES.find((t) => t.id === id) ?? ICON_THEMES[0];
 }
 

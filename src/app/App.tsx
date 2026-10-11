@@ -30,6 +30,7 @@ import { DialogHost, Toasts } from "@/components/overlays/Overlays";
 import { SettingsModal } from "@/components/settings/SettingsModal";
 import { cx } from "@/components/ui";
 import { registerAppCommands } from "./commands";
+import { startDiscordPresence } from "@/integrations/discord";
 import { loadSession, restoreTabs, saveSession } from "./session";
 
 const STROKE = { thin: "1.25", regular: "1.6", bold: "2.1" } as const;
@@ -290,6 +291,9 @@ export function App() {
   useWindowTitle();
   useCloseGuard();
   const ready = useBoot();
+  useEffect(() => {
+    if (ready) startDiscordPresence();
+  }, [ready]);
   const zen = useUi((s) => s.zen);
   const settingsOpen = useUi((s) => s.settingsOpen);
   const panelOpen = useUi((s) => s.panelOpen);

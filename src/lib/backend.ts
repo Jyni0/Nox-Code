@@ -57,6 +57,9 @@ export interface Backend extends PtyEvents {
   sourceCheckout(): Promise<string | null>;
   /** Runs a checker command line (through the platform shell) and captures its output. */
   runCheck(cwd: string, command: string, timeoutSecs?: number): Promise<CheckOutput>;
+  /** Discord Rich Presence through the local Discord app; `null` clears the status. */
+  discordSetActivity(clientId: string, activity: Record<string, unknown> | null): Promise<void>;
+  discordClose(): Promise<void>;
   revealInExplorer(path: string): Promise<void>;
   openUrl(url: string): Promise<void>;
 }

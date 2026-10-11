@@ -563,6 +563,7 @@ export function registerAppCommands() {
       },
     },
     { id: "terminal.new", title: "New Terminal", category: "Terminal", keybinding: "Ctrl+Shift+`", global: true, run: () => void useTerminal.getState().create() },
+    { id: "terminal.split", title: "Split Terminal", category: "Terminal", keybinding: "Ctrl+Shift+5", global: true, run: () => void useTerminal.getState().split() },
     {
       id: "terminal.newWithShell",
       title: "New Terminal With Shell…",

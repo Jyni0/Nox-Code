@@ -243,3 +243,16 @@ pub async fn run_check(cwd: String, command: String, timeout_secs: Option<u64>) 
     let timeout = std::time::Duration::from_secs(timeout_secs.unwrap_or(120));
     blocking(move || crate::checks::run(&PathBuf::from(cwd), &command, timeout)).await
 }
+
+/// Discord Rich Presence (see `discord`): `activity: None` clears the status.
+#[tauri::command]
+pub async fn discord_set_activity(state: State<'_, std::sync::Arc<crate::discord::Presence>>, client_id: String, activity: Option<serde_json::Value>) -> AppResult<()> {
+    let presence = state.inner().clone();
+    blocking(move || presence.set(client_id, activity).map_err(AppError::msg)).await
+}
+
+#[tauri::command]
+pub async fn discord_close(state: State<'_, std::sync::Arc<crate::discord::Presence>>) -> AppResult<()> {
+    let presence = state.inner().clone();
+    blocking(move || presence.close().map_err(AppError::msg)).await
+}

@@ -9,8 +9,14 @@ const v = (name: string) => `var(--syn-${name})`;
  */
 export const noxHighlightStyle = HighlightStyle.define([
   {
-    tag: [t.keyword, t.controlKeyword, t.definitionKeyword, t.moduleKeyword, t.operatorKeyword, t.modifier, t.self],
+    tag: [t.keyword, t.definitionKeyword, t.operatorKeyword, t.modifier, t.self],
     color: v("keyword"),
+    fontStyle: "var(--syn-keyword-style)",
+    fontWeight: "var(--syn-keyword-weight)",
+  },
+  {
+    tag: [t.controlKeyword, t.moduleKeyword],
+    color: `var(--syn-control, ${v("keyword")})`,
     fontStyle: "var(--syn-keyword-style)",
     fontWeight: "var(--syn-keyword-weight)",
   },

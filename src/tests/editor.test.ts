@@ -136,3 +136,26 @@ describe("group layout tree", () => {
     expect(leafIds(syncLayout(t3, ["b", "x"]))).toEqual(["b", "x"]);
   });
 });
+
+describe("undo / redo keys", () => {
+  it("redoes with Ctrl+Y and Ctrl+Shift+Z like VS Code", async () => {
+    const { baseExtensions } = await import("@/editor/setup");
+    const { undo } = await import("@codemirror/commands");
+    const { runScopeHandlers } = await import("@codemirror/view");
+    for (const [key, shift] of [["y", false], ["Z", true]] as const) {
+      const view = new EditorView({ state: EditorState.create({ doc: "", extensions: baseExtensions() }) });
+      const press = () => {
+        // As a browser sends it: Shift+Z arrives as key "Z" with keyCode 90.
+        const ev = new KeyboardEvent("keydown", { key, code: `Key${key.toUpperCase()}`, ctrlKey: true, shiftKey: shift });
+        Object.defineProperty(ev, "keyCode", { value: key.toUpperCase().charCodeAt(0) });
+        return runScopeHandlers(view, ev, "editor");
+      };
+      view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: "hello" } });
+      undo(view);
+      expect(view.state.doc.toString()).toBe("");
+      expect(press()).toBe(true);
+      expect(view.state.doc.toString()).toBe("hello");
+      view.destroy();
+    }
+  });
+});

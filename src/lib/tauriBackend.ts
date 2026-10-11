@@ -69,6 +69,8 @@ export function createTauriBackend(): Backend {
     startupPath: () => invoke("startup_path"),
     sourceCheckout: () => invoke<string | null>("source_checkout").catch(() => null),
     runCheck: (cwd, command, timeoutSecs) => invoke<CheckOutput>("run_check", { cwd, command, timeoutSecs }),
+    discordSetActivity: (clientId, activity) => invoke("discord_set_activity", { clientId, activity }),
+    discordClose: () => invoke("discord_close"),
     revealInExplorer: (path) => revealItemInDir(path),
     openUrl: (url) => openUrl(url),
   };

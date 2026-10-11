@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { extractSymbols } from "@/editor/intel/symbols";
 import { effectiveFor, parseEditorConfig } from "@/stores/project";
-import { compareVersions } from "@/stores/updates";
+import { compareVersions, pickAsset, versionOf } from "@/stores/updates";
 import { EditorState } from "@codemirror/state";
 import { findLinks } from "@/terminal/links";
 import { syntaxDiagnostics } from "@/editor/intel/syntaxErrors";
 import { languageById } from "@/editor/languages";
 import { parseGeneric, parseMsbuild, parseTsc } from "@/editor/intel/problems";
 import { DEFAULT_TAGS, matchTag, parseTags, taggedRanges } from "@/extensions/betterComments";
-import { buildActivity, fill } from "@/integrations/discord";
+import { buildActivity, parseRemote, remoteFromConfig } from "@/integrations/discord";
 import { ensureSyntaxTree } from "@codemirror/language";
 
 const names = (text: string, lang: string) => extractSymbols(text, lang).map((s) => `${s.kind}:${s.name}`);
@@ -78,6 +78,24 @@ describe("updates", () => {
     expect(compareVersions("1.10.0", "1.9.3")).toBe(1);
     expect(compareVersions("1.1.1", "1.1.1")).toBe(0);
     expect(compareVersions("v1.2", "1.2.1")).toBe(-1);
+  });
+  it("reads release versions and picks this computer's installer", () => {
+    expect(versionOf("Release-1.9.2")).toBe("1.9.2");
+    expect(versionOf("v2.0", "x")).toBe("2.0");
+    expect(versionOf("latest", "Nox Code 1.10.0")).toBe("1.10.0");
+    expect(versionOf("nightly")).toBeNull();
+    const a = (name: string) => ({ name, url: "https://github.com/x/" + name, size: 1 });
+    const release = [a("Nox.Code_1.9.2_x64-setup.exe"), a("Nox.Code_1.9.2_x64_en-US.msi"), a("Nox.Code_1.9.2_aarch64.dmg"), a("Nox.Code_1.9.2_x64.dmg"), a("nox-code_1.9.2_amd64.AppImage"), a("nox-code_1.9.2_amd64.deb")];
+    const pick = (os: string, arch: string, list = release) => pickAsset(list, os, arch)?.name ?? null;
+    expect(pick("windows", "x86_64")).toBe("Nox.Code_1.9.2_x64-setup.exe");
+    expect(pick("windows", "x86_64", release.slice(1))).toBe("Nox.Code_1.9.2_x64_en-US.msi");
+    expect(pick("macos", "aarch64")).toBe("Nox.Code_1.9.2_aarch64.dmg");
+    expect(pick("macos", "x86_64")).toBe("Nox.Code_1.9.2_x64.dmg");
+    expect(pick("macos", "aarch64", [a("Nox.Code_1.9.2_universal.dmg")])).toBe("Nox.Code_1.9.2_universal.dmg");
+    expect(pick("linux", "x86_64")).toBe("nox-code_1.9.2_amd64.AppImage");
+    // Today's releases have no macOS build: no installer, the release page instead.
+    expect(pick("macos", "aarch64", release.slice(0, 2))).toBeNull();
+    expect(pick("windows", "aarch64", [a("Nox_x64-setup.exe")])).toBeNull();
   });
 });
 
@@ -186,26 +204,44 @@ describe("better comments", () => {
 });
 
 describe("discord status", () => {
-  const input = { file: "App.tsx", langId: "tsx", workspace: "nox-code", branch: "main", line: 12, col: 4, lines: 340, errors: 2, warnings: 1, idle: false };
-  const opts = { details: "Editing {file}", state: "{workspace} · {branch} · {problems}", showNames: true, elapsed: "session" as const, largeImage: "logo" };
-  it("fills the templates and drops empty parts", () => {
-    expect(fill("{workspace} · {branch} · {problems}", { workspace: "p", branch: "", problems: "no problems" })).toBe("p · no problems");
-    expect(fill("{branch} · {workspace}", { branch: "", workspace: "" })).toBe("");
-    expect(fill("Ln {line}, {lines}", { line: "3", lines: "9 lines" })).toBe("Ln 3, 9 lines");
-  });
-  it("builds what Discord shows", () => {
-    expect(buildActivity(input, opts, { session: 1000, file: 2000 })).toEqual({
+  const input = { file: "App.tsx", langId: "tsx", project: "nox-code", repo: { name: "Jyni0/Nox-Code", url: "https://github.com/Jyni0/Nox-Code" }, branch: "main", errors: 2, warnings: 1, idle: false };
+  const all = { showFile: true, showProject: true, showRepo: true, showBranch: true, showProblems: true };
+  const none = { showFile: false, showProject: false, showRepo: false, showBranch: false, showProblems: false };
+  it("shows each piece only when it's switched on", () => {
+    expect(buildActivity(input, all, 1000)).toEqual({
       type: 0,
-      details: "Editing App.tsx",
-      state: "nox-code · main · 2 errors, 1 warning",
       timestamps: { start: 1000 },
+      details: "Editing App.tsx",
+      state: "nox-code · Jyni0/Nox-Code · ⎇ main · 2 errors, 1 warning",
       assets: { large_image: "logo", large_text: "Editing TypeScript React" },
+      buttons: [{ label: "View repository", url: "https://github.com/Jyni0/Nox-Code" }],
     });
-    // Private: no names; idle; no file open.
-    const priv = buildActivity({ ...input, errors: 0, warnings: 0 }, { ...opts, showNames: false, elapsed: "file" }, { session: 1, file: 2 });
-    expect([priv.details, priv.state, priv.timestamps]).toEqual(["Editing a TypeScript React file", "a project · no problems", { start: 2 }]);
-    expect(buildActivity({ ...input, idle: true }, opts, { session: 1, file: 2 }).details).toBe("Idle");
-    const none = buildActivity({ ...input, file: null, langId: null }, { ...opts, elapsed: "none", largeImage: "" }, { session: 1, file: 2 });
-    expect([none.details, none.timestamps, none.assets]).toEqual(["Browsing files", undefined, undefined]);
+    const hidden = buildActivity(input, none, 1000);
+    expect([hidden.details, hidden.state, hidden.buttons, (hidden.assets as { large_text: string }).large_text]).toEqual(["Writing TypeScript React", undefined, undefined, "Nox Code"]);
+    expect(buildActivity(input, { ...none, showBranch: true, showProblems: true }, 1).state).toBe("⎇ main · 2 errors, 1 warning");
+    expect(buildActivity({ ...input, errors: 0, warnings: 0 }, { ...none, showProblems: true }, 1).state).toBe("no problems");
+    expect(buildActivity({ ...input, idle: true }, all, 1).details).toBe("Idle");
+    expect(buildActivity({ ...input, file: null, langId: null }, all, 1).details).toBe("Browsing files");
+  });
+  it("reads the repository from git", () => {
+    expect(parseRemote("git@github.com:Jyni0/Nox-Code.git")).toEqual({ name: "Jyni0/Nox-Code", url: "https://github.com/Jyni0/Nox-Code" });
+    expect(parseRemote("https://github.com/Jyni0/Nox-Code")).toEqual({ name: "Jyni0/Nox-Code", url: "https://github.com/Jyni0/Nox-Code" });
+    expect(parseRemote("ssh://git@gitlab.com:2222/group/sub/app.git")).toEqual({ name: "sub/app", url: "https://gitlab.com/group/sub/app" });
+    expect(parseRemote("C:/repos/app")?.url).toBeNull();
+    const config = `[core]
+	bare = false
+[remote "upstream"]
+	url = https://github.com/a/b.git
+[remote "origin"]
+	url = git@github.com:me/app.git
+	fetch = +refs/heads/*
+[branch "main"]
+`;
+    expect(remoteFromConfig(config)).toBe("git@github.com:me/app.git");
+    expect(remoteFromConfig(`[remote "upstream"]
+	url = https://github.com/a/b.git
+`)).toBe("https://github.com/a/b.git");
+    expect(remoteFromConfig(`[core]
+`)).toBeNull();
   });
 });

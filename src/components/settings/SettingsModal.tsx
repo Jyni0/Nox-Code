@@ -582,15 +582,17 @@ function ExtensionsSettings() {
 function UpdatesCard() {
   const [auto, setAuto] = useS("checkForUpdates");
   const status = useUpdates((s) => s.status);
-  const ahead = useUpdates((s) => s.info?.aheadBy ?? 0);
+  const latest = useUpdates((s) => s.info?.version);
   const checkedAt = useUpdates((s) => s.checkedAt);
   const error = useUpdates((s) => s.error);
   const hint =
     status === "checking" ? "Checking GitHub…"
-    : status === "available" ? `${ahead} new commit${ahead === 1 ? "" : "s"} on GitHub`
-    : status === "current" ? `Up to date${checkedAt ? ` · checked ${new Date(checkedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : ""}`
+    : status === "available" ? `Nox Code ${latest} is available`
+    : status === "downloading" ? `Downloading Nox Code ${latest}…`
+    : status === "installing" ? "Installing…"
+    : status === "current" ? `Up to date — ${APP_VERSION} is the latest release${checkedAt ? ` · checked ${new Date(checkedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : ""}`
     : status === "error" ? `Check failed: ${error}`
-    : REPO ? `Compares this build with the main branch of github.com/${REPO}` : "This build does not know its GitHub repository";
+    : REPO ? `Checks the releases of github.com/${REPO}` : "This build does not know its GitHub repository";
   return (
     <SettingsCard>
       <SettingRow title="Updates" hint={hint} keywords="update version github new check upgrade">
@@ -600,7 +602,7 @@ function UpdatesCard() {
               Update…
             </Button>
           ) : (
-            <Button size="sm" variant="secondary" disabled={status === "checking" || !REPO} onClick={() => void useUpdates.getState().check(true)}>
+            <Button size="sm" variant="secondary" disabled={status === "checking" || status === "downloading" || status === "installing" || !REPO} onClick={() => void useUpdates.getState().check(true)}>
               Check for updates
             </Button>
           )}

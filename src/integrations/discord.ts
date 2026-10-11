@@ -1,85 +1,108 @@
 /**
  * Discord status ("Rich Presence"): what you're working on, shown on your
- * Discord profile — the file, the project, the branch, errors, time spent.
- * Talks to the Discord app on this computer; nothing goes through a server.
+ * Discord profile. Each piece — file, project, repository, branch, problems —
+ * can be switched off. Talks to the Discord app on this computer; nothing
+ * goes through a server.
  */
 import { create } from "zustand";
 import { backend } from "@/lib/backend";
-import { basename } from "@/lib/path";
+import { basename, join } from "@/lib/path";
 import { languageName } from "@/editor/languages";
 import { activeTabInfo, useEditor } from "@/stores/editor";
 import { useWorkspace } from "@/stores/workspace";
-import { useCursor } from "@/stores/cursor";
 import { useSettings } from "@/stores/settings";
 import { useProblems } from "@/editor/intel/problems";
 import { extSettings, isExtEnabled } from "@/extensions/registry";
 
 export const DISCORD_EXT = "discord-presence";
+/** Nox Code's Discord application ("Playing Nox Code"). */
+export const DISCORD_APP_ID = "1558888709284176045";
+const IDLE_MINUTES = 5;
 
-export type DiscordStatus = "off" | "needs-id" | "connecting" | "connected" | "error";
+export type DiscordStatus = "off" | "connecting" | "connected" | "error";
 export const useDiscord = create<{ status: DiscordStatus; message: string }>(() => ({ status: "off", message: "" }));
+
+export interface Repo {
+  /** "owner/name". */
+  name: string;
+  /** Web page, when the remote is on a web host. */
+  url: string | null;
+}
 
 export interface PresenceInput {
   file: string | null;
   langId: string | null;
-  workspace: string | null;
+  project: string | null;
+  repo: Repo | null;
   branch: string | null;
-  line: number;
-  col: number;
-  lines: number;
   errors: number;
   warnings: number;
   idle: boolean;
 }
 
 export interface PresenceOptions {
-  details: string;
-  state: string;
-  showNames: boolean;
-  elapsed: "session" | "file" | "none";
-  largeImage: string;
+  showFile: boolean;
+  showProject: boolean;
+  showRepo: boolean;
+  showBranch: boolean;
+  showProblems: boolean;
 }
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
-/** "Editing {file}" → "Editing App.tsx". Unknown or empty variables vanish with their separators. */
-export function fill(template: string, v: Record<string, string>): string {
-  const out = template.replace(/\{(\w+)\}/g, (_, k: string) => v[k] ?? "");
-  // Separators left dangling by an empty variable: "App.tsx · " → "App.tsx".
-  return out
-    .replace(/(\s*[·|•-]\s*){2,}/g, " · ")
-    .replace(/^\s*[·|•:-]\s*|\s*[·|•:-]\s*$/g, "")
-    .replace(/\s{2,}/g, " ")
-    .trim();
-}
-
 /** Discord wants 2–128 characters per text field. */
 const field = (s: string) => (s.length < 2 ? undefined : s.length > 128 ? s.slice(0, 127) + "…" : s);
 
+/**
+ * `git@github.com:me/app.git`, `https://github.com/me/app`, `ssh://git@host/me/app.git`
+ * → { name: "me/app", url: "https://github.com/me/app" }.
+ */
+export function parseRemote(remote: string): Repo | null {
+  const r = remote.trim();
+  const m = /^(?:[a-z+]+:\/\/)?(?:[^@/]+@)?([^/:]+)(?::\d+)?[:/](.+?)(?:\.git)?\/?$/i.exec(r);
+  if (!m) return null;
+  const host = m[1].toLowerCase();
+  const path = m[2].replace(/^\/+/, "");
+  if (!path.includes("/")) return null;
+  const name = path.split("/").slice(-2).join("/");
+  // Local paths ("C:/repos/x", "/srv/x") have no web page.
+  const local = /^[a-z]$/i.test(host) || r.startsWith("/") || r.startsWith("file:");
+  return { name, url: local ? null : `https://${host}/${path}` };
+}
+
+/** The `origin` remote (or the first one) from a .git/config. */
+export function remoteFromConfig(config: string): string | null {
+  let current: string | null = null;
+  const remotes = new Map<string, string>();
+  for (const line of config.split(/\r?\n/)) {
+    const sec = /^\s*\[remote\s+"([^"]+)"\]/.exec(line);
+    if (sec) current = sec[1];
+    else if (/^\s*\[/.test(line)) current = null;
+    else if (current) {
+      const url = /^\s*url\s*=\s*(.+?)\s*$/.exec(line);
+      if (url && !remotes.has(current)) remotes.set(current, url[1]);
+    }
+  }
+  return remotes.get("origin") ?? remotes.values().next().value ?? null;
+}
+
 /** The Discord activity for what's open now (pure: easy to test). */
-export function buildActivity(i: PresenceInput, o: PresenceOptions, started: { session: number; file: number }): Record<string, unknown> {
+export function buildActivity(i: PresenceInput, o: PresenceOptions, started: number): Record<string, unknown> {
   const lang = i.langId ? languageName(i.langId) : "";
-  const vars: Record<string, string> = {
-    file: i.file ? (o.showNames ? i.file : `a ${lang || "text"} file`) : "",
-    lang,
-    workspace: i.workspace ? (o.showNames ? i.workspace : "a project") : "",
-    branch: i.branch && o.showNames ? i.branch : "",
-    line: i.file ? String(i.line) : "",
-    col: i.file ? String(i.col) : "",
-    lines: i.file ? plural(i.lines, "line") : "",
-    errors: i.errors ? plural(i.errors, "error") : "",
-    warnings: i.warnings ? plural(i.warnings, "warning") : "",
-    problems: i.errors || i.warnings ? [i.errors && plural(i.errors, "error"), i.warnings && plural(i.warnings, "warning")].filter(Boolean).join(", ") : "no problems",
-  };
-  const details = i.idle ? "Idle" : i.file ? fill(o.details, vars) : i.workspace ? "Browsing files" : "Starting up";
-  const state = fill(o.state, vars);
-  const activity: Record<string, unknown> = { type: 0 };
+  const details = i.idle ? "Idle" : i.file ? (o.showFile ? `Editing ${i.file}` : lang ? `Writing ${lang}` : "Writing code") : i.project ? "Browsing files" : "Starting up";
+  const parts: string[] = [];
+  if (o.showProject && i.project) parts.push(i.project);
+  if (o.showRepo && i.repo && i.repo.name !== i.project) parts.push(i.repo.name);
+  if (o.showBranch && i.branch) parts.push(`⎇ ${i.branch}`);
+  if (o.showProblems && i.file && !i.idle) {
+    parts.push(i.errors || i.warnings ? [i.errors && plural(i.errors, "error"), i.warnings && plural(i.warnings, "warning")].filter(Boolean).join(", ") : "no problems");
+  }
+  const activity: Record<string, unknown> = { type: 0, timestamps: { start: started } };
   if (field(details)) activity.details = field(details);
-  if (field(state)) activity.state = field(state);
-  const start = o.elapsed === "session" ? started.session : o.elapsed === "file" ? started.file : 0;
-  if (start) activity.timestamps = { start };
-  const image = o.largeImage.trim();
-  if (image) activity.assets = { large_image: image, large_text: field(i.file && lang ? `Editing ${lang}` : "Nox Code") };
+  const state = field(parts.join(" · "));
+  if (state) activity.state = state;
+  activity.assets = { large_image: "logo", large_text: i.file && lang && o.showFile ? `Editing ${lang}` : "Nox Code" };
+  if (o.showRepo && i.repo?.url) activity.buttons = [{ label: "View repository", url: i.repo.url }];
   return activity;
 }
 
@@ -88,44 +111,72 @@ export function buildActivity(i: PresenceInput, o: PresenceOptions, started: { s
 const MIN_GAP = 4000; // Discord allows 5 updates per 20 seconds.
 const RETRY = 20_000;
 
-let started = { session: Date.now(), file: Date.now() };
-let lastFile: string | null = null;
+let started = Date.now();
 let lastActivity = Date.now();
 let lastKey = "";
 let lastSent = 0;
 let timer: ReturnType<typeof setTimeout> | undefined;
 let connected = false;
+let repo: { root: string; repo: Repo | null } | null = null;
 
-function options(): PresenceOptions & { clientId: string; idleMinutes: number } {
+function options(): PresenceOptions {
   const s = extSettings(DISCORD_EXT);
   return {
-    clientId: String(s.clientId ?? "").trim(),
-    details: String(s.details ?? ""),
-    state: String(s.state ?? ""),
-    showNames: s.showNames !== false,
-    elapsed: (s.elapsed as PresenceOptions["elapsed"]) ?? "session",
-    largeImage: String(s.largeImage ?? ""),
-    idleMinutes: Number(s.idleMinutes ?? 5),
+    showFile: s.showFile !== false,
+    showProject: s.showProject !== false,
+    showRepo: s.showRepo === true,
+    showBranch: s.showBranch !== false,
+    showProblems: s.showProblems !== false,
   };
 }
 
-function input(idleMinutes: number): PresenceInput {
+/** The project's repository, read from .git/config once per folder. */
+async function loadRepo(root: string) {
+  let found: Repo | null = null;
+  try {
+    let gitDir = join(root, ".git");
+    // A worktree or submodule: ".git" is a file pointing at the real folder.
+    const file = await backend()
+      .readFile(gitDir)
+      .then((f) => f.content)
+      .catch(() => null);
+    const pointer = file && /^gitdir:\s*(.+)$/m.exec(file);
+    if (pointer) {
+      const target = pointer[1].trim();
+      gitDir = /^(?:[A-Za-z]:)?[\\/]/.test(target) ? target : join(root, target);
+    }
+    const config = await backend()
+      .readFile(join(gitDir, "config"))
+      .catch(() => backend().readFile(join(gitDir, "..", "..", "config")));
+    const remote = remoteFromConfig(config.content);
+    found = remote ? parseRemote(remote) : null;
+  } catch {
+    found = null;
+  }
+  if (useWorkspace.getState().root === root) {
+    repo = { root, repo: found };
+    schedule();
+  }
+}
+
+function input(): PresenceInput {
   const { buffer } = activeTabInfo();
   const ws = useWorkspace.getState();
-  const cur = useCursor.getState();
   const path = buffer?.path ?? null;
   const mine = useProblems.getState().problems.filter((p) => path && p.path === path);
+  if (ws.root && repo?.root !== ws.root) {
+    repo = { root: ws.root, repo: null };
+    void loadRepo(ws.root);
+  }
   return {
     file: buffer ? basename(buffer.path ?? buffer.name) : null,
     langId: buffer?.langId ?? null,
-    workspace: ws.root ? basename(ws.root) : null,
+    project: ws.root ? basename(ws.root) : null,
+    repo: ws.root ? (repo?.repo ?? null) : null,
     branch: ws.git?.branch ?? null,
-    line: cur.line,
-    col: cur.col,
-    lines: cur.lines,
     errors: mine.filter((p) => p.severity === "error").length,
     warnings: mine.filter((p) => p.severity === "warning").length,
-    idle: idleMinutes > 0 && Date.now() - lastActivity > idleMinutes * 60_000,
+    idle: Date.now() - lastActivity > IDLE_MINUTES * 60_000,
   };
 }
 
@@ -142,25 +193,15 @@ async function push() {
     useDiscord.setState({ status: "off", message: "" });
     return;
   }
-  const o = options();
-  if (!o.clientId) {
-    useDiscord.setState({ status: "needs-id", message: "Add your Discord Application ID in the extension's settings" });
-    return;
-  }
-  const now = input(o.idleMinutes);
-  if (now.file !== lastFile) {
-    lastFile = now.file;
-    started.file = Date.now();
-  }
-  const activity = buildActivity(now, o, started);
-  const key = o.clientId + JSON.stringify(activity);
+  const activity = buildActivity(input(), options(), started);
+  const key = JSON.stringify(activity);
   if (key === lastKey && connected) return;
   const wait = lastSent + MIN_GAP - Date.now();
   if (wait > 0) return schedule(wait);
   lastSent = Date.now();
   if (!connected) useDiscord.setState({ status: "connecting", message: "" });
   try {
-    await backend().discordSetActivity(o.clientId, activity);
+    await backend().discordSetActivity(DISCORD_APP_ID, activity);
     connected = true;
     lastKey = key;
     useDiscord.setState({ status: "connected", message: "" });
@@ -179,14 +220,16 @@ let startedService = false;
 export function startDiscordPresence() {
   if (startedService || typeof window === "undefined" || backend().kind !== "tauri") return;
   startedService = true;
-  started = { session: Date.now(), file: Date.now() };
+  started = Date.now();
   const kick = () => schedule();
   useEditor.subscribe((s, p) => (s.activePaneId !== p.activePaneId || s.panes !== p.panes || s.buffers !== p.buffers) && kick());
   useWorkspace.subscribe((s, p) => {
-    if (s.root !== p.root) started.session = Date.now();
+    if (s.root !== p.root) {
+      started = Date.now();
+      repo = null;
+    }
     if (s.root !== p.root || s.git?.branch !== p.git?.branch) kick();
   });
-  useCursor.subscribe((s, p) => (s.line !== p.line || s.lines !== p.lines) && schedule(3000));
   useProblems.subscribe((s, p) => s.version !== p.version && kick());
   useSettings.subscribe((s, p) => {
     if (s.extEnabled !== p.extEnabled || s.extSettings !== p.extSettings) {
@@ -205,7 +248,7 @@ export function startDiscordPresence() {
   kick();
 }
 
-/** Re-tries now (the status bar item / settings). */
+/** Re-tries now (the status bar item). */
 export function reconnectDiscord() {
   lastKey = "";
   lastSent = 0;

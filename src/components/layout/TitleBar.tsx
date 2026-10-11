@@ -79,26 +79,29 @@ function ViewSwitcher({ onPick }: { onPick?: () => void }) {
   );
 }
 
-/** Shown while main on GitHub has commits this build does not. */
+/** Shown while a newer release is on GitHub; shows the download while it runs. */
 function UpdateButton() {
   const available = useUpdateAvailable();
   const version = useUpdates((s) => s.info?.version);
-  const ahead = useUpdates((s) => s.info?.aheadBy ?? 0);
+  const status = useUpdates((s) => s.status);
+  const progress = useUpdates((s) => s.progress);
+  const pct = progress?.total ? Math.min(100, Math.round((progress.received / progress.total) * 100)) : null;
+  const label = status === "downloading" ? `Downloading${pct !== null ? ` ${pct}%` : "…"}` : status === "installing" ? "Installing…" : `Update${version ? ` · ${version}` : ""}`;
   return (
     <AnimatePresence>
       {available && (
         <motion.button
           data-testid="update-button"
-          title={`${ahead} new commit${ahead === 1 ? "" : "s"} on GitHub`}
+          title={status === "available" ? `Nox Code ${version} is available — click to install` : label}
           className="mr-1 flex h-[24px] items-center gap-1.5 rounded-lg bg-[color-mix(in_srgb,var(--accent)_16%,transparent)] px-2.5 text-[12px] font-medium text-[var(--accent)] transition-colors hover:bg-[color-mix(in_srgb,var(--accent)_26%,transparent)]"
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.9 }}
           transition={{ duration: 0.15 }}
-          onClick={openUpdateDialog}
+          onClick={() => status === "available" && openUpdateDialog()}
         >
-          <ArrowDownToLine size={13} strokeWidth={2} />
-          Update{version ? ` · ${version}` : ""}
+          <ArrowDownToLine size={13} strokeWidth={2} className={cx(status === "downloading" && "animate-bounce")} />
+          {label}
         </motion.button>
       )}
     </AnimatePresence>

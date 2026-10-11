@@ -1,9 +1,11 @@
 pub mod checks;
 pub mod commands;
 pub mod discord;
+pub mod updater;
 pub mod error;
 pub mod fsops;
 pub mod git;
+pub mod instance;
 pub mod pty;
 pub mod search;
 pub mod watcher;
@@ -42,6 +44,9 @@ pub fn run() {
         .manage(commands::AppState::default())
         .manage(std::sync::Arc::new(discord::Presence::default()))
         .setup(|app| {
+            // Decide early which window owns the session, then set up `nox` (Windows, once).
+            instance::is_primary();
+            std::thread::spawn(instance::auto_install_once);
             if let Some(window) = app.get_webview_window("main") {
                 disable_browser_shortcuts(&window);
             }
@@ -81,6 +86,14 @@ pub fn run() {
             commands::run_check,
             commands::discord_set_activity,
             commands::discord_close,
+            commands::update_download,
+            commands::update_install,
+            commands::update_platform,
+            commands::is_primary_instance,
+            commands::new_window,
+            commands::cli_status,
+            commands::cli_install,
+            commands::cli_uninstall,
         ])
         .on_window_event(|window, event| {
             // No tray, no background mode: closing the window ends the app and

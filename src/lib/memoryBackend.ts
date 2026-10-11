@@ -422,6 +422,28 @@ export function createMemoryBackend(opts: MemoryOptions = {}): Backend & { fs: M
       throw new Error("Discord status needs the desktop app");
     },
     async discordClose() {},
+    async updateDownload() {
+      throw new Error("Updating needs the desktop app");
+    },
+    async updateInstall() {
+      throw new Error("Updating needs the desktop app");
+    },
+    async isPrimaryInstance() {
+      return true;
+    },
+    async newWindow() {
+      window.open(location.href, "_blank", "noreferrer");
+    },
+    async cliStatus() {
+      return false;
+    },
+    async cliInstall(): Promise<string> {
+      throw new Error("The nox command needs the desktop app");
+    },
+    async cliUninstall() {},
+    async platform() {
+      return { os: "browser", arch: "" };
+    },
     async revealInExplorer() {},
     async openUrl(url) {
       window.open(url, "_blank", "noreferrer");

@@ -1,52 +1,51 @@
 /**
- * "Is there a newer Nox Code?" — answered from the main branch on GitHub,
- * no release needed. The app knows the commit it was built from; GitHub's
- * compare API says how many commits main is ahead of it. Builds made outside
- * git fall back to comparing package.json versions.
+ * "Is there a newer Nox Code?" — answered from the repository's latest GitHub
+ * release, by version number: a build of the newest release is up to date no
+ * matter what was pushed to main since. Updating downloads that release's
+ * installer for this computer and runs it; nothing is built locally.
  */
 import { create } from "zustand";
 import { backend } from "@/lib/backend";
-import { join } from "@/lib/path";
-import { isMac } from "@/lib/keys";
 import { useSettings } from "./settings";
-import { useTerminal } from "./terminal";
+import { useEditor } from "./editor";
 import { useUi, errorMessage, toast } from "./ui";
 
 export const APP_VERSION = __APP_VERSION__;
 export const BUILD_SHA = __BUILD_SHA__;
 export const REPO = __REPO__;
-const BRANCH = __BUILD_BRANCH__ && __BUILD_BRANCH__ !== "HEAD" ? __BUILD_BRANCH__ : "main";
 
-export interface RemoteCommit {
-  sha: string;
-  message: string;
-  date: string;
-  author: string;
+export interface ReleaseAsset {
+  name: string;
+  url: string;
+  size: number;
 }
 
 export interface UpdateInfo {
-  /** Version in package.json on the branch. */
-  version: string | null;
-  /** Head commit of the branch. */
-  sha: string;
-  /** Commits the branch is ahead of this build (newest first). */
-  commits: RemoteCommit[];
-  aheadBy: number;
+  version: string;
+  /** Release title, or the tag. */
+  title: string;
+  notes: string;
+  /** The release page. */
+  page: string;
+  publishedAt: string;
+  /** The installer for this computer; null when the release has none. */
+  asset: ReleaseAsset | null;
+  /** "Windows" / "macOS" / "Linux", for messages. */
+  platform: string;
 }
 
-type Status = "idle" | "checking" | "current" | "available" | "error";
+type Status = "idle" | "checking" | "current" | "available" | "downloading" | "installing" | "error";
 
 interface UpdatesState {
   status: Status;
   info: UpdateInfo | null;
   error: string | null;
   checkedAt: number | null;
-  /** The source checkout the app was built from, when it is on this machine. */
-  checkout: string | null;
+  progress: { received: number; total: number | null } | null;
 
   check(manual?: boolean): Promise<void>;
-  /** Pulls and rebuilds in the integrated terminal. */
-  updateFromSource(): Promise<void>;
+  /** Downloads the release installer and runs it. */
+  install(): Promise<void>;
 }
 
 /** -1 / 0 / 1 for dotted versions ("1.10.0" > "1.9.3"). */
@@ -60,76 +59,87 @@ export function compareVersions(a: string, b: string): number {
   return 0;
 }
 
-async function getJson<T>(url: string): Promise<{ ok: true; data: T } | { ok: false; status: number }> {
-  const res = await fetch(url, { headers: { Accept: "application/vnd.github+json" }, cache: "no-store" });
-  if (!res.ok) return { ok: false, status: res.status };
-  return { ok: true, data: (await res.json()) as T };
-}
-
-interface GhCommit {
-  sha: string;
-  commit: { message: string; author?: { name?: string; date?: string }; committer?: { date?: string } };
-}
-
-const toCommit = (c: GhCommit): RemoteCommit => ({
-  sha: c.sha,
-  message: c.commit.message,
-  date: c.commit.author?.date ?? c.commit.committer?.date ?? "",
-  author: c.commit.author?.name ?? "",
-});
-
-async function remoteVersion(): Promise<string | null> {
-  try {
-    const res = await fetch(`https://raw.githubusercontent.com/${REPO}/${BRANCH}/package.json`, { cache: "no-store" });
-    if (!res.ok) return null;
-    return ((await res.json()) as { version?: string }).version ?? null;
-  } catch {
-    return null;
+/** "Release-1.9.2", "v1.9.2", "Nox Code 1.9.2" → "1.9.2". */
+export function versionOf(...labels: Array<string | null | undefined>): string | null {
+  for (const l of labels) {
+    const m = l && /(\d+\.\d+(?:\.\d+){0,2})/.exec(l);
+    if (m) return m[1];
   }
+  return null;
 }
+
+/**
+ * The installer for an OS / CPU among a release's files: Windows prefers the
+ * setup .exe over the .msi; macOS takes a .dmg (universal fits both CPUs);
+ * Linux an AppImage, then .deb, then .rpm.
+ */
+export function pickAsset(assets: ReleaseAsset[], os: string, arch: string): ReleaseAsset | null {
+  const arm = /aarch64|arm64/i.test(arch);
+  const archOf = (n: string) => (/aarch64|arm64/i.test(n) ? "arm" : /x64|x86_64|amd64|x86-64/i.test(n) ? "x64" : /universal/i.test(n) ? "any" : "unknown");
+  const fits = (n: string) => {
+    const a = archOf(n);
+    return a === "any" || a === "unknown" || a === (arm ? "arm" : "x64");
+  };
+  const kinds: RegExp[] = os === "windows" ? [/-setup\.exe$/i, /\.exe$/i, /\.msi$/i] : os === "macos" ? [/\.dmg$/i] : os === "linux" ? [/\.appimage$/i, /\.deb$/i, /\.rpm$/i] : [];
+  for (const kind of kinds) {
+    const list = assets.filter((a) => kind.test(a.name) && fits(a.name));
+    // An exact CPU match beats universal / unmarked builds.
+    const exact = list.find((a) => archOf(a.name) === (arm ? "arm" : "x64"));
+    if (exact ?? list[0]) return exact ?? list[0];
+  }
+  return null;
+}
+
+interface GhRelease {
+  tag_name: string;
+  name: string | null;
+  body: string | null;
+  html_url: string;
+  published_at: string;
+  assets: Array<{ name: string; browser_download_url: string; size: number }>;
+}
+
+const PLATFORM_NAME: Record<string, string> = { windows: "Windows", macos: "macOS", linux: "Linux" };
 
 export const useUpdates = create<UpdatesState>((set, get) => ({
   status: "idle",
   info: null,
   error: null,
   checkedAt: null,
-  checkout: null,
+  progress: null,
 
   async check(manual = false) {
     if (!REPO) {
       if (manual) toast("Update check is not available", "warning", "This build does not know its GitHub repository.");
       return;
     }
-    if (get().status === "checking") return;
+    const busy = get().status;
+    if (busy === "checking" || busy === "downloading" || busy === "installing") return;
     set({ status: "checking", error: null });
-    void backend()
-      .sourceCheckout()
-      .then((checkout) => set({ checkout }))
-      .catch(() => {});
     try {
-      const version = await remoteVersion();
-      let info: UpdateInfo | null = null;
-      if (BUILD_SHA) {
-        const r = await getJson<{ status: string; ahead_by: number; commits: GhCommit[] }>(`https://api.github.com/repos/${REPO}/compare/${BUILD_SHA}...${BRANCH}`);
-        if (r.ok) {
-          const commits = r.data.commits.map(toCommit).reverse();
-          const head = commits[0]?.sha ?? BUILD_SHA;
-          info = { version, sha: head, commits, aheadBy: r.data.status === "ahead" || r.data.status === "diverged" ? r.data.ahead_by : 0 };
-        } else if (r.status === 403 || r.status === 429) {
-          throw new Error("GitHub rate limit reached — try again later");
-        }
-      }
-      if (!info) {
-        // Unknown build commit (not pushed, or built from a zip): versions decide.
-        const head = await getJson<GhCommit>(`https://api.github.com/repos/${REPO}/commits/${BRANCH}`).catch(() => null);
-        const newer = !!version && compareVersions(version, APP_VERSION) > 0;
-        info = { version, sha: head && head.ok ? head.data.sha : "", commits: newer && head && head.ok ? [toCommit(head.data)] : [], aheadBy: newer ? 1 : 0 };
-      }
-      const available = info.aheadBy > 0;
+      const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, { headers: { Accept: "application/vnd.github+json" }, cache: "no-store" });
+      if (res.status === 404) throw new Error("This repository has no releases yet");
+      if (res.status === 403 || res.status === 429) throw new Error("GitHub rate limit reached — try again later");
+      if (!res.ok) throw new Error(`GitHub answered ${res.status}`);
+      const r = (await res.json()) as GhRelease;
+      const version = versionOf(r.tag_name, r.name);
+      if (!version) throw new Error(`Can't read a version from the release "${r.tag_name}"`);
+      const { os, arch } = await backend().platform();
+      const assets = r.assets.map((a) => ({ name: a.name, url: a.browser_download_url, size: a.size }));
+      const info: UpdateInfo = {
+        version,
+        title: r.name?.trim() || r.tag_name,
+        notes: (r.body ?? "").trim(),
+        page: r.html_url,
+        publishedAt: r.published_at,
+        asset: pickAsset(assets, os, arch),
+        platform: PLATFORM_NAME[os] ?? os,
+      };
+      const available = compareVersions(version, APP_VERSION) > 0;
       set({ status: available ? "available" : "current", info, checkedAt: Date.now() });
       if (manual) {
         if (available) openUpdateDialog();
-        else toast("Nox Code is up to date", "success", `Version ${APP_VERSION}${BUILD_SHA ? ` · ${BUILD_SHA.slice(0, 7)}` : ""}`);
+        else toast("Nox Code is up to date", "success", `Version ${APP_VERSION} is the latest release.`);
       }
     } catch (e) {
       set({ status: "error", error: errorMessage(e), checkedAt: Date.now() });
@@ -137,71 +147,74 @@ export const useUpdates = create<UpdatesState>((set, get) => ({
     }
   },
 
-  async updateFromSource() {
-    const dir = get().checkout;
-    if (!dir) return;
-    const shells = await useTerminal.getState().loadShells();
-    const win = !isMac && navigator.userAgent.includes("Windows");
-    // `&&` chains in cmd.exe and every POSIX shell; PowerShell 5 lacks it.
-    const profile = win ? shells.find((s) => s.id === "cmd")?.id : undefined;
-    const bundle = join(dir, "src-tauri", "target", "release", "bundle");
-    const open = win ? `explorer "${bundle}"` : isMac ? `open "${bundle}"` : `xdg-open "${bundle}"`;
-    const id = await useTerminal.getState().create(dir, profile);
-    if (!id) return;
-    useUi.getState().togglePanel(true);
-    await useTerminal.getState().sendText(`git pull --ff-only && npm install && npm run tauri:build && ${open}\r`);
-    toast("Updating from source", "info", "The new installer opens when the build finishes.");
+  async install() {
+    const info = get().info;
+    if (!info?.asset || get().status === "downloading" || get().status === "installing") return;
+    // The installer closes Nox: nothing unsaved may be lost.
+    const dirty = Object.values(useEditor.getState().buffers).filter((b) => b.dirty);
+    if (dirty.length) {
+      const ans = await useUi.getState().ask({
+        title: `Save changes before updating?`,
+        message: `${dirty.length} file${dirty.length === 1 ? " has" : "s have"} unsaved changes. Nox Code closes while the update installs.`,
+        buttons: [
+          { id: "save", label: "Save All & Update", variant: "primary" },
+          { id: "cancel", label: "Cancel" },
+        ],
+        cancelId: "cancel",
+      });
+      if (ans !== "save") return;
+      await useEditor.getState().saveAll();
+      if (Object.values(useEditor.getState().buffers).some((b) => b.dirty)) return toast("Update cancelled", "warning", "Some files could not be saved.");
+    }
+    const asset = info.asset;
+    set({ status: "downloading", progress: { received: 0, total: asset.size || null }, error: null });
+    try {
+      const path = await backend().updateDownload(asset.url, asset.name, (received, total) => set({ progress: { received, total: total ?? (asset.size || null) } }));
+      set({ status: "installing" });
+      await backend().updateInstall(path);
+      if (info.platform === "Windows") toast(`Installing Nox Code ${info.version}…`, "info", "Nox Code closes now and the installer takes over.");
+      else {
+        toast(`Nox Code ${info.version} downloaded`, "success", info.platform === "macOS" ? "Drag Nox Code into Applications, replacing the old one, then reopen it." : "Install the opened package, then reopen Nox Code.");
+        set({ status: "available", progress: null });
+      }
+    } catch (e) {
+      set({ status: "available", progress: null, error: errorMessage(e) });
+      toast("Update failed", "error", errorMessage(e));
+    }
   },
 }));
 
-export const useUpdateAvailable = () => useUpdates((s) => s.status === "available");
+export const useUpdateAvailable = () => useUpdates((s) => s.status === "available" || s.status === "downloading" || s.status === "installing");
 
-const firstLine = (m: string) => m.split("\n")[0];
+const mb = (n: number) => `${(n / 1024 / 1024).toFixed(1)} MB`;
 
 export function openUpdateDialog() {
-  const { info, checkout } = useUpdates.getState();
+  const { info } = useUpdates.getState();
   if (!info) return;
-  const shown = info.commits.slice(0, 12);
+  const notes = info.notes.split("\n").slice(0, 14).join("\n");
   void useUi
     .getState()
     .ask({
-      title: info.version && compareVersions(info.version, APP_VERSION) > 0 ? `Nox Code ${info.version} is available` : "A new version of Nox Code is available",
+      title: `Nox Code ${info.version} is available`,
       message: (
         <div className="flex flex-col gap-2">
           <div className="text-[12.5px] text-[var(--text-muted)]">
-            You have {APP_VERSION}
-            {BUILD_SHA ? ` (${BUILD_SHA.slice(0, 7)})` : ""}. {info.aheadBy} new commit{info.aheadBy === 1 ? "" : "s"} on GitHub:
+            You have {APP_VERSION}.{" "}
+            {info.asset ? `The ${info.platform} installer (${mb(info.asset.size)}) downloads and installs — Nox Code reopens on the new version.` : `This release has no installer for ${info.platform} yet.`}
           </div>
-          {shown.length > 0 && (
-            <ul className="flex max-h-[220px] flex-col gap-1 overflow-auto rounded-xl bg-[var(--bg-input)] p-2 text-[12px]">
-              {shown.map((c) => (
-                <li key={c.sha} className="flex gap-2">
-                  <span className="shrink-0 font-mono text-[var(--accent)]">{c.sha.slice(0, 7)}</span>
-                  <span className="min-w-0 truncate text-[var(--text-main)]">{firstLine(c.message)}</span>
-                </li>
-              ))}
-              {info.commits.length > shown.length && <li className="text-[var(--text-dim)]">…and {info.commits.length - shown.length} more</li>}
-            </ul>
-          )}
-          {checkout ? (
-            <div className="text-[11.5px] text-[var(--text-dim)]">“Update now” pulls into {checkout}, rebuilds in the terminal and opens the new installer.</div>
-          ) : (
-            <div className="text-[11.5px] text-[var(--text-dim)]">Download the source from GitHub and build it, or pull it in your checkout.</div>
-          )}
+          {notes && <div className="max-h-[220px] overflow-auto whitespace-pre-wrap rounded-xl bg-[var(--bg-input)] p-2.5 text-[12px] text-[var(--text-main)]">{notes}</div>}
         </div>
       ),
       buttons: [
-        ...(checkout ? [{ id: "source", label: "Update now", variant: "primary" as const }] : [{ id: "download", label: "Download", variant: "primary" as const }]),
-        { id: "changes", label: "View changes", variant: "secondary" as const },
+        ...(info.asset ? [{ id: "install", label: "Download & Install", variant: "primary" as const }] : []),
+        { id: "page", label: "Release Page", variant: info.asset ? ("secondary" as const) : ("primary" as const) },
         { id: "later", label: "Later" },
       ],
       cancelId: "later",
     })
     .then((answer) => {
-      const u = useUpdates.getState();
-      if (answer === "source") void u.updateFromSource();
-      if (answer === "download") void backend().openUrl(`https://github.com/${REPO}/archive/refs/heads/${BRANCH}.zip`);
-      if (answer === "changes") void backend().openUrl(BUILD_SHA ? `https://github.com/${REPO}/compare/${BUILD_SHA}...${BRANCH}` : `https://github.com/${REPO}/commits/${BRANCH}`);
+      if (answer === "install") void useUpdates.getState().install();
+      if (answer === "page") void backend().openUrl(info.page);
     });
 }
 

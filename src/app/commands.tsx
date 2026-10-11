@@ -269,6 +269,40 @@ export function registerAppCommands() {
     { id: "explorer.newFolder", title: "New Folder…", category: "Explorer", when: () => !!ws().root, run: () => (ui().showSideView("explorer"), ws().startCreate("folder")) },
     { id: "file.openFolder", title: "Open Folder…", category: "File", keybinding: "Ctrl+O", global: true, run: openFolderDialog },
     {
+      id: "window.new",
+      title: "New Window",
+      category: "File",
+      keybinding: "Ctrl+Shift+N",
+      global: true,
+      run: () => void backend().newWindow().catch((e) => toast("Could not open a new window", "error", errorMessage(e))),
+    },
+    {
+      id: "shell.installCli",
+      title: "Install 'nox' Command in PATH",
+      category: "Shell Command",
+      run: async () => {
+        try {
+          const where = await backend().cliInstall();
+          toast("The 'nox' command is installed", "success", `Open a new terminal and run "nox ." or "nox <folder>" (${where}).`);
+        } catch (e) {
+          toast("Could not install the 'nox' command", "error", errorMessage(e));
+        }
+      },
+    },
+    {
+      id: "shell.uninstallCli",
+      title: "Uninstall 'nox' Command from PATH",
+      category: "Shell Command",
+      run: async () => {
+        try {
+          await backend().cliUninstall();
+          toast("The 'nox' command is removed", "success");
+        } catch (e) {
+          toast("Could not remove the 'nox' command", "error", errorMessage(e));
+        }
+      },
+    },
+    {
       id: "file.openFile",
       title: "Open File…",
       category: "File",

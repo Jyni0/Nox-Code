@@ -11,7 +11,7 @@ import { effectiveFor, useProject } from "@/stores/project";
 import { isExtEnabled } from "@/extensions/registry";
 import { canFormat } from "@/extensions/prettier";
 import { cx } from "@/components/ui";
-import { DISCORD_EXT, reconnectDiscord, useDiscord } from "@/integrations/discord";
+import { reconnectDiscord, useDiscord } from "@/integrations/discord";
 
 function Item({ children, onClick, title, className, testId }: { children: React.ReactNode; onClick?: () => void; title?: string; className?: string; testId?: string }) {
   return (
@@ -31,13 +31,13 @@ function DiscordItem() {
   const { status, message } = useDiscord();
   if (status === "off") return null;
   const tip =
-    status === "connected" ? "Discord: showing your status" : status === "connecting" ? "Discord: connecting…" : status === "needs-id" ? "Discord: add your Application ID (click)" : `Discord: ${message} — click to retry`;
+    status === "connected" ? "Discord: showing your status" : status === "connecting" ? "Discord: connecting…" : `Discord: ${message} — click to retry`;
   return (
     <Item
       testId="status-discord"
       title={tip}
-      className={cx(status === "connected" && "text-[#7983f5]", (status === "error" || status === "needs-id") && "opacity-60")}
-      onClick={() => (status === "needs-id" ? useUi.getState().openSettings("extensions", DISCORD_EXT) : reconnectDiscord())}
+      className={cx(status === "connected" && "text-[#7983f5]", status === "error" && "opacity-60")}
+      onClick={reconnectDiscord}
     >
       <Gamepad2 size={13} />
     </Item>

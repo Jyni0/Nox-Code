@@ -1,6 +1,6 @@
 [package]
 name = "noxcode"
-version = "1.9.2"
+version = "2.1.0"
 description = "Nox Code — a code editor for the night shift"
 authors = ["Nox Code"]
 edition = "2021"
@@ -29,6 +29,7 @@ portable-pty = "0.9"
 # "Delete" moves to the Recycle Bin instead of destroying files.
 trash = "5"
 base64 = "0.22"
+ureq = "2"
 
 # WebView2 settings Tauri does not expose (browser shortcuts, Ctrl+wheel zoom).
 [target.'cfg(windows)'.dependencies]

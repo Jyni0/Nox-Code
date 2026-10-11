@@ -192,16 +192,23 @@ function useBoot() {
       for (const id of Object.keys(p.buffers)) if (!s.buffers[id]) forgetBufferStates(id);
     });
     let saveTimer: ReturnType<typeof setTimeout>;
+    // Only the first window keeps the session: a second window (or one opened
+    // with `nox <folder>`) must not restore — or overwrite — the last one.
+    let primary = false;
     const unSession = useEditor.subscribe(() => {
+      if (!primary) return;
       clearTimeout(saveTimer);
       saveTimer = setTimeout(saveSession, 500);
     });
     const unUpdates = startUpdateChecks();
-    const unWs = useWorkspace.subscribe((s, p) => s.root !== p.root && saveSession());
+    const unWs = useWorkspace.subscribe((s, p) => primary && s.root !== p.root && saveSession());
 
     void (async () => {
       const settings = useSettings.getState();
-      const session = settings.restoreSession ? loadSession() : null;
+      primary = await backend()
+        .isPrimaryInstance()
+        .catch(() => true);
+      const session = settings.restoreSession && primary ? loadSession() : null;
       const fromCli = await backend().startupPath().catch(() => null);
       const root = fromCli ?? session?.root ?? null;
       if (root && (await backend().exists(root))) {

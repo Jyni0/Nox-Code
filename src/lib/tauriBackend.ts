@@ -71,6 +71,24 @@ export function createTauriBackend(): Backend {
     runCheck: (cwd, command, timeoutSecs) => invoke<CheckOutput>("run_check", { cwd, command, timeoutSecs }),
     discordSetActivity: (clientId, activity) => invoke("discord_set_activity", { clientId, activity }),
     discordClose: () => invoke("discord_close"),
+    async updateDownload(url, name, onProgress) {
+      const off = onProgress ? await listen<{ received: number; total: number | null }>("update-progress", (e) => onProgress(e.payload.received, e.payload.total ?? null)) : null;
+      try {
+        return await invoke<string>("update_download", { url, name });
+      } finally {
+        off?.();
+      }
+    },
+    updateInstall: (path) => invoke("update_install", { path }),
+    isPrimaryInstance: () => invoke("is_primary_instance"),
+    newWindow: (path) => invoke("new_window", { path: path ?? null }),
+    cliStatus: () => invoke("cli_status"),
+    cliInstall: () => invoke("cli_install"),
+    cliUninstall: () => invoke("cli_uninstall"),
+    platform: async () => {
+      const [os, arch] = await invoke<[string, string]>("update_platform");
+      return { os, arch };
+    },
     revealInExplorer: (path) => revealItemInDir(path),
     openUrl: (url) => openUrl(url),
   };

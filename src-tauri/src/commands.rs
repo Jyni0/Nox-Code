@@ -256,3 +256,71 @@ pub async fn discord_close(state: State<'_, std::sync::Arc<crate::discord::Prese
     let presence = state.inner().clone();
     blocking(move || presence.close().map_err(AppError::msg)).await
 }
+
+#[derive(Clone, Serialize)]
+struct UpdateProgress {
+    received: u64,
+    total: Option<u64>,
+}
+
+/// Downloads a release installer (see `updater`), reporting `update-progress` events.
+#[tauri::command]
+pub async fn update_download(app: AppHandle, url: String, name: String) -> AppResult<String> {
+    blocking(move || {
+        crate::updater::download(&url, &name, |received, total| {
+            let _ = app.emit("update-progress", UpdateProgress { received, total });
+        })
+        .map(|p| p.to_string_lossy().into_owned())
+        .map_err(AppError::msg)
+    })
+    .await
+}
+
+/// Runs a downloaded installer; on Windows the app then quits so it can be replaced.
+#[tauri::command]
+pub async fn update_install(app: AppHandle, path: String) -> AppResult<()> {
+    let quit = crate::updater::launch(&PathBuf::from(path)).map_err(AppError::msg)?;
+    if quit {
+        // A moment for the installer to start before the app (and its files) go away.
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(800));
+            app.exit(0);
+        });
+    }
+    Ok(())
+}
+
+/// `{ os, arch }` as Rust sees them ("windows" / "macos" / "linux", "x86_64" / "aarch64"):
+/// picks the right installer (the webview's user agent can't tell Apple silicon apart).
+#[tauri::command]
+pub fn update_platform() -> (String, String) {
+    (std::env::consts::OS.to_string(), std::env::consts::ARCH.to_string())
+}
+
+/// The first running window owns the saved session; later ones start empty.
+#[tauri::command]
+pub fn is_primary_instance() -> bool {
+    crate::instance::is_primary()
+}
+
+/// Opens another Nox Code window (on `path` when given).
+#[tauri::command]
+pub fn new_window(path: Option<String>) -> AppResult<()> {
+    crate::instance::new_window(path.as_deref()).map_err(AppError::msg)
+}
+
+#[tauri::command]
+pub async fn cli_status() -> AppResult<bool> {
+    blocking(|| Ok(crate::instance::cli_installed())).await
+}
+
+/// Puts the `nox` command on the PATH; returns where it went.
+#[tauri::command]
+pub async fn cli_install() -> AppResult<String> {
+    blocking(|| crate::instance::install_cli().map_err(AppError::msg)).await
+}
+
+#[tauri::command]
+pub async fn cli_uninstall() -> AppResult<()> {
+    blocking(|| crate::instance::uninstall_cli().map_err(AppError::msg)).await
+}

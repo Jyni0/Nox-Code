@@ -60,6 +60,20 @@ export interface Backend extends PtyEvents {
   /** Discord Rich Presence through the local Discord app; `null` clears the status. */
   discordSetActivity(clientId: string, activity: Record<string, unknown> | null): Promise<void>;
   discordClose(): Promise<void>;
+  /** Downloads a release installer from GitHub; resolves to the saved file. */
+  updateDownload(url: string, name: string, onProgress?: (received: number, total: number | null) => void): Promise<string>;
+  /** Runs a downloaded installer (on Windows the app then quits so it can be replaced). */
+  updateInstall(path: string): Promise<void>;
+  /** The real OS and CPU ("windows" | "macos" | "linux", "x86_64" | "aarch64"). */
+  platform(): Promise<{ os: string; arch: string }>;
+  /** The first running window owns the saved session; later ones start empty. */
+  isPrimaryInstance(): Promise<boolean>;
+  /** Another Nox Code window, on `path` when given. */
+  newWindow(path?: string): Promise<void>;
+  /** The `nox` terminal command: installed? / install (returns where) / remove. */
+  cliStatus(): Promise<boolean>;
+  cliInstall(): Promise<string>;
+  cliUninstall(): Promise<void>;
   revealInExplorer(path: string): Promise<void>;
   openUrl(url: string): Promise<void>;
 }

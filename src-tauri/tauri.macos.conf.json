@@ -12,6 +12,7 @@
         "center": true,
         "decorations": true,
         "dragDropEnabled": false,
+        "transparent": true,
         "label": "main",
         "titleBarStyle": "Overlay",
         "hiddenTitle": true,

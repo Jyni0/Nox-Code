@@ -250,7 +250,7 @@ export function TitleBar() {
   }, [open]);
 
   return (
-    <div ref={barRef} data-tauri-drag-region data-testid="title-bar" className="relative flex h-[38px] shrink-0 select-none items-center bg-[var(--bg-titlebar)]">
+    <div ref={barRef} data-tauri-drag-region data-testid="title-bar" className="relative flex h-[38px] shrink-0 select-none items-center bg-[var(--win-titlebar)]">
       {/* macOS draws its traffic lights over this corner. */}
       <div className={cx("flex h-full items-center gap-0.5", isMac && !fullscreen ? "pl-[84px]" : "px-1")}>
         <Fold compact={compactMenus} shown={menusShown} setShown={setMenusShown} busy={open !== null} icon={Menu} label="Menu" testId="title-menus-toggle">

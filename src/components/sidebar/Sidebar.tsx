@@ -40,7 +40,7 @@ export function Sidebar() {
 
   return (
     <aside
-      className="relative flex shrink-0 flex-col bg-[var(--bg-sidebar)] text-[13px] leading-tight"
+      className="relative flex shrink-0 flex-col bg-[var(--win-sidebar)] text-[13px] leading-tight"
       style={{ width }}
       data-testid="sidebar"
     >

@@ -78,6 +78,31 @@ function useAppearance() {
     st.setProperty("--icon-stroke", STROKE[s.iconWeight]);
     requestAnimationFrame(() => viewRegistry.all().forEach((v) => v.requestMeasure()));
   }, [s.fontFamily, s.fontSize, s.lineHeight, s.ligatures, s.uiFont, s.iconWeight, s.uiScale, dpr]);
+  // See-through window: only the window's backgrounds fade (see the --win-*
+  // variables in index.css); text, popups, menus and settings stay solid.
+  useEffect(() => {
+    const st = document.documentElement.style;
+    const a = Math.max(0, Math.min(100, s.windowOpacity)) / 100;
+    const vars = ["--win-outer", "--win-base", "--win-titlebar", "--win-sidebar", "--win-panel", "--win-editor"];
+    if (a >= 1) {
+      vars.forEach((v) => st.removeProperty(v));
+      return;
+    }
+    const pct = (x: number) => `${Math.round(x * 1000) / 10}%`;
+    // One translucent layer for the whole window; title bar, sidebar and status
+    // bar show it through. Editor and terminal panels add a little more of their
+    // own color on top, so they still read as cards.
+    st.setProperty("--win-outer", "transparent");
+    st.setProperty("--win-base", `color-mix(in srgb, var(--bg-sidebar) ${pct(a)}, transparent)`);
+    st.setProperty("--win-titlebar", "transparent");
+    st.setProperty("--win-sidebar", "transparent");
+    st.setProperty("--win-panel", `color-mix(in srgb, var(--bg-editor) ${pct(a * 0.5)}, transparent)`);
+    st.setProperty("--win-editor", "transparent");
+  }, [s.windowOpacity]);
+  // The blur / acrylic / vibrancy behind it (cleared while the window is solid: some cost performance).
+  useEffect(() => {
+    void appWindow.setEffect(s.windowOpacity < 100 ? s.windowEffect : "none").catch(() => {});
+  }, [s.windowEffect, s.windowOpacity]);
   // Follow the OS light / dark setting.
   useEffect(() => {
     if (!s.followSystem) return;

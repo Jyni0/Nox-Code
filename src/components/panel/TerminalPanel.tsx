@@ -218,7 +218,7 @@ export function TerminalPanel() {
     <section
       data-testid="terminal-panel"
       className={cx(
-        "relative flex min-h-0 shrink-0 flex-col overflow-hidden bg-[var(--bg-editor)]",
+        "relative flex min-h-0 shrink-0 flex-col overflow-hidden bg-[var(--win-panel)]",
         islandCorners({ tl: edges.left, tr: edges.right, bl: edges.docked, br: edges.docked }),
         maximized && "flex-1",
       )}

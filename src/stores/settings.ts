@@ -11,6 +11,9 @@ export type AutoSave = "off" | "afterDelay" | "onFocusChange";
 export type Whitespace = "none" | "boundary" | "all";
 export type IconWeight = "thin" | "regular" | "bold";
 
+/** "blur" / "acrylic" / "mica": Windows; "vibrancy*" and "glass" (Liquid Glass, macOS 26+): macOS. */
+export type WindowEffect = "none" | "blur" | "acrylic" | "mica" | "vibrancy" | "vibrancy-dark" | "vibrancy-sidebar" | "glass";
+
 export interface SettingsState {
   themeId: string;
   customThemes: Theme[];
@@ -65,6 +68,10 @@ export interface SettingsState {
   titleActions: "bar" | "compact";
   previewTabs: boolean;
   restoreSession: boolean;
+  /** Window background opacity, 0–100 (100 = solid). Text and popups stay solid. */
+  windowOpacity: number;
+  /** What the OS draws behind a see-through window. */
+  windowEffect: WindowEffect;
   /** Look for new commits on GitHub at start and every few hours. */
   checkForUpdates: boolean;
   confirmDelete: boolean;
@@ -129,6 +136,8 @@ export const DEFAULT_SETTINGS: SettingsState = {
   titleActions: "bar",
   previewTabs: true,
   restoreSession: true,
+  windowOpacity: 100,
+  windowEffect: "none",
   checkForUpdates: true,
   confirmDelete: true,
   filesExclude: ".git, .DS_Store, Thumbs.db",

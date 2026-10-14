@@ -2,7 +2,7 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { Braces, Brush, FileCog, FolderTree, Info, Keyboard, Palette, PanelsTopLeft, Puzzle, Save, Search, Shapes, SquareCode, SquareTerminal, X, type LucideIcon } from "lucide-react";
 import { useUi, type SettingsSection } from "@/stores/ui";
-import { DEFAULT_SETTINGS, allThemes, useSettings } from "@/stores/settings";
+import { DEFAULT_SETTINGS, allThemes, useSettings, type WindowEffect } from "@/stores/settings";
 import { EXTENSIONS, EXT_CATEGORIES, isExtEnabled } from "@/extensions/registry";
 import { themeSwatch } from "@/themes/apply";
 import { Button, Combobox, IconButton, Input, NavItem, ScrollArea, SectionHeading, Segmented, SettingRow, SettingsCard, SettingsQuery, Switch, cx } from "@/components/ui";
@@ -189,6 +189,31 @@ function Group({ title, children, className }: { title: string; children: React.
 /** True while the settings search has a query: pictures and galleries step aside for matching rows. */
 const useSearching = () => useContext(SettingsQuery).trim() !== "";
 
+const isWindows = !isMac && typeof navigator !== "undefined" && navigator.userAgent.includes("Windows");
+
+/** What the OS can draw behind a see-through window, per platform (none on Linux). */
+const WINDOW_EFFECTS: Array<{ value: WindowEffect; label: string }> = [
+  { value: "none", label: "None — just see-through" },
+  ...(isWindows
+    ? [
+        { value: "acrylic" as const, label: "Acrylic (frosted blur)" },
+        { value: "blur" as const, label: "Blur" },
+        { value: "mica" as const, label: "Mica (Windows 11)" },
+      ]
+    : isMac
+      ? [
+          { value: "vibrancy" as const, label: "Vibrancy" },
+          { value: "vibrancy-dark" as const, label: "Vibrancy — dark (HUD)" },
+          { value: "vibrancy-sidebar" as const, label: "Vibrancy — sidebar" },
+          { value: "glass" as const, label: "Liquid Glass (macOS 26)" },
+        ]
+      : []),
+];
+
+const EFFECT_HINT = isWindows
+  ? "Blurs what's behind the window. Acrylic and Blur can lag while the window is moved or resized on some Windows versions; Mica needs Windows 11."
+  : "macOS materials drawn behind the window.";
+
 function Appearance() {
   const themeId = useSettings((s) => s.themeId);
   const customThemes = useSettings((s) => s.customThemes);
@@ -197,6 +222,8 @@ function Appearance() {
   const [darkId, setDark] = useS("darkThemeId");
   const [scale, setScale] = useS("uiScale");
   const [uiFont, setUiFont] = useS("uiFont");
+  const [opacity, setOpacity] = useS("windowOpacity");
+  const [effect, setEffect] = useS("windowEffect");
   const searching = useSearching();
   const themes = allThemes({ customThemes });
   const opts = (kind: "dark" | "light") => themes.filter((t) => t.kind === kind).map((t) => ({ value: t.id, label: t.name, swatch: themeSwatch(t).slice(0, 3) }));
@@ -247,6 +274,24 @@ function Appearance() {
         <SettingRow title="Interface font" hint="Used for menus, tabs and panels" keywords="ui typeface">
           <Input className="w-[240px]" value={uiFont} onChange={(e) => setUiFont(e.target.value)} />
         </SettingRow>
+      </Group>
+      <Group title="Transparency">
+        <SettingRow
+          title="Background opacity"
+          hint="How solid the window's background is — text, menus, popups and settings stay solid. 100% = no transparency."
+          keywords="transparent transparency opacity see through glass background window alpha"
+        >
+          <Num value={opacity} min={0} max={100} step={1} suffix="%" onChange={setOpacity} />
+        </SettingRow>
+        {WINDOW_EFFECTS.length > 1 && (
+          <SettingRow
+            title="Background effect"
+            hint={opacity >= 100 ? "Shows once the background opacity is below 100%." : EFFECT_HINT}
+            keywords="blur acrylic mica vibrancy glass frosted transparent window"
+          >
+            <Combobox className="w-[240px]" options={WINDOW_EFFECTS} value={effect} onChange={(v) => setEffect(v as WindowEffect)} />
+          </SettingRow>
+        )}
       </Group>
       {!searching && (
         <SettingsCard className="p-2">

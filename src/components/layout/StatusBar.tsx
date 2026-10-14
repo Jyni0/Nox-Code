@@ -80,7 +80,7 @@ export function StatusBar() {
   void extEnabled;
 
   return (
-    <footer className="flex h-[26px] shrink-0 items-center gap-0.5 bg-[var(--bg-sidebar)] px-1.5 py-[3px]" data-testid="status-bar">
+    <footer className="flex h-[26px] shrink-0 items-center gap-0.5 bg-[var(--win-sidebar)] px-1.5 py-[3px]" data-testid="status-bar">
       {git?.isRepo && (
         <Item onClick={() => useUi.getState().showSideView("git")} title="Source Control" testId="status-branch">
           <GitBranch size={12} />

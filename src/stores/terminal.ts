@@ -3,7 +3,7 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { backend } from "@/lib/backend";
 import { basename, join } from "@/lib/path";
-import { useSettings, findTheme } from "./settings";
+import { useSettings, findTheme, type SettingsState } from "./settings";
 import { terminalTheme } from "@/themes/apply";
 import { useWorkspace } from "./workspace";
 import { useProject } from "./project";
@@ -75,6 +75,12 @@ let wired = false;
  * mouse to the wrong cells (selection lands off to the side). The terminal
  * host cancels the zoom (index.css), so the font is scaled here instead.
  */
+/** The theme's terminal colors; with a see-through window the panel behind paints the background. */
+const termTheme = (s: SettingsState) => {
+  const t = terminalTheme(findTheme(s.themeId, s));
+  return s.windowOpacity < 100 ? { ...t, background: "rgba(0, 0, 0, 0)" } : t;
+};
+
 const termFontSize = (s: { terminalFontSize: number; uiScale: number }) => Math.round(s.terminalFontSize * (s.uiScale || 1) * 100) / 100;
 let seq = 0;
 
@@ -97,8 +103,8 @@ function wire() {
   });
   // Repaint every terminal when the theme or font changes.
   useSettings.subscribe((s, prev) => {
-    if (s.themeId === prev.themeId && s.customThemes === prev.customThemes && s.terminalFontSize === prev.terminalFontSize && s.uiScale === prev.uiScale && s.terminalCursor === prev.terminalCursor && s.fontFamily === prev.fontFamily) return;
-    const theme = terminalTheme(findTheme(s.themeId, s));
+    if (s.themeId === prev.themeId && s.customThemes === prev.customThemes && s.terminalFontSize === prev.terminalFontSize && s.uiScale === prev.uiScale && s.windowOpacity === prev.windowOpacity && s.terminalCursor === prev.terminalCursor && s.fontFamily === prev.fontFamily) return;
+    const theme = termTheme(s);
     for (const l of live.values()) {
       l.term.options.theme = theme;
       l.term.options.fontSize = termFontSize(s);
@@ -185,7 +191,9 @@ export const useTerminal = create<TerminalState>((set, get) => ({
       cursorBlink: true,
       allowProposedApi: true,
       scrollback: 10_000,
-      theme: terminalTheme(findTheme(s.themeId, s)),
+      theme: termTheme(s),
+      // A see-through window shows through the terminal too.
+      allowTransparency: true,
       macOptionIsMeta: true,
     });
     const fit = new FitAddon();

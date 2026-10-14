@@ -257,7 +257,7 @@ function PaneView({ pane, index, total, at }: { pane: Pane; index: number; total
 
   return (
     <section
-      className={cx("flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[var(--bg-editor)]", corners)}
+      className={cx("flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[var(--win-panel)]", corners)}
       data-testid="pane"
       data-active={focused}
       onMouseDown={() => useEditor.getState().focusPane(pane.id)}

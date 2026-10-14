@@ -1,4 +1,5 @@
 import { inTauri } from "./backend";
+import type { WindowEffect } from "@/stores/settings";
 
 /** Window controls; in a browser they fall back to the Fullscreen API or no-ops. */
 async function win() {
@@ -34,6 +35,24 @@ export const appWindow = {
     }
     const w = await win();
     await w.setFullscreen(!(await w.isFullscreen()));
+  },
+  /** What the OS draws behind the see-through window ("none" clears it). */
+  async setEffect(effect: WindowEffect) {
+    if (!inTauri) return;
+    const { Effect, EffectState } = await import("@tauri-apps/api/window");
+    const map: Record<Exclude<WindowEffect, "none">, (typeof Effect)[keyof typeof Effect]> = {
+      blur: Effect.Blur,
+      acrylic: Effect.Acrylic,
+      mica: Effect.Mica,
+      vibrancy: Effect.UnderWindowBackground,
+      "vibrancy-dark": Effect.HudWindow,
+      "vibrancy-sidebar": Effect.Sidebar,
+      glass: Effect.LiquidGlassRegular,
+    };
+    const w = await win();
+    if (effect === "none") await w.clearEffects().catch(() => {});
+    // Active: keep the effect while the window is in the background too (macOS).
+    else await w.setEffects({ effects: [map[effect]], state: EffectState.Active });
   },
   async setTitle(title: string) {
     document.title = title;

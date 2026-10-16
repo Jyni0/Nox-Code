@@ -60,6 +60,21 @@ test("switches themes from settings and the palette", async ({ page }) => {
   await expect(page.getByTestId("status-theme")).toContainText("Event Horizon");
 });
 
+test("opens settings.json from the palette and applies it on save", async ({ page }) => {
+  await boot(page);
+  await page.keyboard.press("Control+Shift+P");
+  await page.getByTestId("palette-input").fill(">open settings json");
+  await page.keyboard.press("Enter");
+  await expect(page.locator('[data-testid=tab][data-title="settings.json"]')).toBeVisible();
+  const editor = page.locator(".cm-content");
+  await expect(editor).toContainText('"themeId"');
+  await editor.click();
+  await page.keyboard.press("Control+A");
+  await page.keyboard.insertText('{ "themeId": "event-horizon" }');
+  await page.keyboard.press("Control+S");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "event-horizon");
+});
+
 test("splits the editor and keeps both groups in sync", async ({ page }) => {
   await boot(page);
   await openFromTree(page, "src", "main.ts");

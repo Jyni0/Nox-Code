@@ -23,6 +23,7 @@ import { effectiveFor, useProject } from "@/stores/project";
 import { useUpdates } from "@/stores/updates";
 import { useSearch } from "@/stores/search";
 import { exportSettings } from "@/stores/settingsJson";
+import { loadSettingsFromFile, openSettingsFile } from "@/stores/settingsFile";
 import { canFormat, formatText, prettierOptionsFor } from "@/extensions/prettier";
 import { ICON_THEMES } from "@/icons/iconThemes";
 import { themeSwatch } from "@/themes/apply";
@@ -642,6 +643,8 @@ export function registerAppCommands() {
       run: () => copyText(exportSettings(), "Settings copied as JSON"),
     },
     { id: "settings.open", title: "Open Settings", category: "Preferences", keybinding: "Ctrl+,", global: true, run: () => ui().openSettings() },
+    { id: "settings.openJson", title: "Open Settings (JSON)", category: "Preferences", run: () => void openSettingsFile() },
+    { id: "settings.loadJson", title: "Load Settings from JSON File…", category: "Preferences", run: loadSettingsFromFile },
     { id: "settings.theme", title: "Color Theme", category: "Preferences", keybinding: "Ctrl+Alt+T", global: true, run: pickTheme },
     { id: "settings.iconTheme", title: "File Icon Theme", category: "Preferences", run: pickIconTheme },
     { id: "settings.themeStudio", title: "Theme Studio: Customize Current Theme", category: "Preferences", run: () => ui().openSettings("themes", "studio") },

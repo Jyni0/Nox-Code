@@ -13,6 +13,7 @@ import { applyTheme } from "@/themes/apply";
 import { isExtEnabled } from "@/extensions/registry";
 import { canFormat, formatOnSaveFor, formatText, prettierOptionsFor } from "@/extensions/prettier";
 import { registerSaveHook, useEditor } from "@/stores/editor";
+import { wireSettingsFile } from "@/stores/settingsFile";
 import { findTheme, useActiveTheme, useSettings } from "@/stores/settings";
 import { useWindowEdges } from "@/components/layout/islands";
 import { useUi } from "@/stores/ui";
@@ -200,6 +201,7 @@ function useBoot() {
     if (booted) return;
     booted = true;
     registerAppCommands();
+    wireSettingsFile();
     const unHook = registerSaveHook(async (buf, text) => {
       if (!isExtEnabled("prettier") || !canFormat(buf.langId) || !formatOnSaveFor(buf.path, buf.langId)) return null;
       const { formatted } = await formatText(text, buf.langId, prettierOptionsFor(buf.path, buf.langId));

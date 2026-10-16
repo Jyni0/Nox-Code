@@ -1,6 +1,6 @@
 import { useContext, useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
-import { Braces, Brush, FileCog, FolderTree, Info, Keyboard, Palette, PanelsTopLeft, Puzzle, Save, Search, Shapes, SquareCode, SquareTerminal, X, type LucideIcon } from "lucide-react";
+import { Brush, FileCog, FolderTree, Info, Keyboard, Palette, PanelsTopLeft, Puzzle, Save, Search, Shapes, SquareCode, SquareTerminal, X, type LucideIcon } from "lucide-react";
 import { useUi, type SettingsSection } from "@/stores/ui";
 import { DEFAULT_SETTINGS, allThemes, useSettings, type WindowEffect } from "@/stores/settings";
 import { EXTENSIONS, EXT_CATEGORIES, isExtEnabled } from "@/extensions/registry";
@@ -12,8 +12,8 @@ import { inTauri } from "@/lib/backend";
 import { isMac } from "@/lib/keys";
 import { CUSTOM_PROFILE, useTerminal } from "@/stores/terminal";
 import { exportSettings, importSettings } from "@/stores/settingsJson";
+import { loadSettingsFromFile, openSettingsFile } from "@/stores/settingsFile";
 import { errorMessage, toast } from "@/stores/ui";
-import { copyText } from "@/app/fileOps";
 import { APP_VERSION, BUILD_SHA, REPO, openUpdateDialog, useUpdates } from "@/stores/updates";
 import { ThemeStudio } from "./ThemeStudio";
 import { IconsSettings } from "./IconsSettings";
@@ -682,10 +682,21 @@ function About() {
       </SettingsCard>
       <UpdatesCard />
       <SettingsCard>
-        <SettingRow title="Settings as JSON" hint="Copy them to move to another computer or keep a backup; paste JSON back to apply it." keywords="export import backup copy paste json sync">
+        <SettingRow title="Settings as JSON" hint="Open settings.json in the editor (saving it applies it), or load a JSON file of your own." keywords="export import backup load open file paste json sync">
           <div className="flex gap-1.5">
-            <Button size="sm" variant="secondary" data-testid="settings-copy-json" onClick={() => copyText(exportSettings(), "Settings copied as JSON")}>
-              Copy JSON
+            <Button
+              size="sm"
+              variant="secondary"
+              data-testid="settings-open-json"
+              onClick={() => {
+                useUi.getState().closeSettings();
+                void openSettingsFile();
+              }}
+            >
+              Open settings.json
+            </Button>
+            <Button size="sm" variant="secondary" data-testid="settings-load-json" onClick={loadSettingsFromFile}>
+              Load from file…
             </Button>
             <Button size="sm" variant="secondary" data-testid="settings-edit-json" onClick={() => setJson(json === null ? exportSettings() : null)}>
               {json === null ? "Edit JSON…" : "Close editor"}
@@ -859,10 +870,7 @@ export function SettingsModal() {
                 <div className="text-[17px] font-semibold text-[var(--text-main)]">{searching ? "Search results" : TITLES[section][0]}</div>
                 <div className="mt-0.5 text-[12.5px] text-[var(--text-dim)]">{searching ? `Settings matching “${query.trim()}”` : TITLES[section][1]}</div>
               </div>
-              <IconButton label="Copy settings as JSON" className="ml-auto" onClick={() => copyText(exportSettings(), "Settings copied as JSON")}>
-                <Braces size={14} />
-              </IconButton>
-              <IconButton label="Close" onClick={close}>
+              <IconButton label="Close" className="ml-auto" onClick={close}>
                 <X size={14} />
               </IconButton>
             </div>
